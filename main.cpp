@@ -34,7 +34,7 @@ int main() {
     
     // Main loop
     auto lastUpdate = std::chrono::steady_clock::now();
-    const std::chrono::milliseconds updateInterval(1000); // Update every second
+    const std::chrono::milliseconds updateInterval(333); // Update every 1/3 second
     
     while (running) {
         auto now = std::chrono::steady_clock::now();

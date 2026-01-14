@@ -6,23 +6,23 @@
 
 Display::Display(int width, int height) 
     : window_(nullptr), renderer_(nullptr), font_(nullptr), width_(width), height_(height),
-      backgroundColor_{64, 64, 64, 255},  // RGB(64, 64, 64)
+      backgroundColor_{64, 64, 94, 255},  // RGB(64, 64, 64)
       textColor_{255, 255, 255, 255},
-      valueColor_{0, 255, 0, 255},
-      labelColor_{200, 200, 200, 255},
+      valueColor_{89, 135, 96, 255},
+      labelColor_{203, 203, 69, 255},
       borderColor_{255, 255, 0, 255},  // Bright yellow borders
       cpuUserColor_{255, 0, 0, 255},    // Red for user
       cpuSystemColor_{255, 165, 0, 255}, // Orange for system
       cpuIdleColor_{0, 0, 0, 255},      // Black for idle
-      memUsedColor_{0, 255, 0, 255},    // Green for used
+      memUsedColor_{74, 137, 92, 255},    // Custom green for used
       memBufferColor_{255, 165, 0, 255}, // Orange for buffers
       memSlabColor_{0, 100, 255, 255},   // Dark blue for slab
       memFreeColor_{255, 0, 0, 255},     // Red for free
-      diskReadColor_{255, 255, 255, 255}, // White for read label
-      diskWriteColor_{255, 0, 0, 255},    // Red for write
+      diskReadColor_{159, 215, 244, 255}, // White for read label
+      diskWriteColor_{127, 112, 247, 255},    // Red for write
       diskIdleColor_{0, 0, 0, 255},       // Black for idle
-      netInColor_{255, 0, 0, 255},        // Red for in
-      netOutColor_{255, 255, 255, 255},   // White for out label
+      netInColor_{159, 215, 244, 255},        // Red for in
+      netOutColor_{127, 112, 247, 255},   // White for out label
       netIdleColor_{0, 0, 0, 255},        // Black for idle
       irqColor_{255, 0, 0, 255},          // Red for IRQs
       irqIdleColor_{0, 0, 0, 255} {       // Black for idle
@@ -198,7 +198,7 @@ void Display::draw(const SystemMetrics& metrics) {
 
 void Display::drawCPUMeter(const std::vector<CPUMetrics>& metrics, int y) {
     // Draw label and value at calculated positions
-    drawText(4, y + meterHeight_/2 - charHeight_/2, "CPU", textColor_);
+    drawText(4, y + meterHeight_/2 - charHeight_/2, "CPU", labelColor_);
     
     double user = 0, system = 0, idle = 100;
     if (!metrics.empty()) {
@@ -212,7 +212,7 @@ void Display::drawCPUMeter(const std::vector<CPUMetrics>& metrics, int y) {
 
     // Draw legend above the bar
     std::vector<std::string> labels = {"USR", "SYS", "IDLE"};
-    std::vector<SDL_Color> colors = {cpuUserColor_, cpuSystemColor_, textColor_};
+    std::vector<SDL_Color> colors = {cpuUserColor_, cpuSystemColor_, cpuIdleColor_};
     drawLegend(labelWidth_ + 16, y - charHeight_ - 5, labels, colors);
     
     // Draw horizontal meter
@@ -223,14 +223,14 @@ void Display::drawCPUMeter(const std::vector<CPUMetrics>& metrics, int y) {
 
 void Display::drawMemoryMeter(const MemoryMetrics& metrics, int y) {
     // Draw label and value
-    drawText(4, y + meterHeight_/2 - charHeight_/2, "MEM", textColor_);
+    drawText(4, y + meterHeight_/2 - charHeight_/2, "MEM", labelColor_);
     
     double usedGB = metrics.used / (1024.0 * 1024.0 * 1024.0);
     drawRightAlignedText(labelWidth_, y + meterHeight_/2 - charHeight_/2, formatValue(usedGB, "G"), valueColor_);
     
     // Draw legend above the bar
     std::vector<std::string> labels = {"USED", "BUFF", "SLAB", "FREE"};
-    std::vector<SDL_Color> colors = {textColor_, {173, 216, 230, 255}, {0, 0, 139, 255}, memFreeColor_};
+    std::vector<SDL_Color> colors = {valueColor_, {173, 216, 230, 255}, {0, 0, 139, 255}, memFreeColor_};
     drawLegend(labelWidth_ + 16, y - charHeight_ - 5, labels, colors);
     
     // Calculate memory components
@@ -247,14 +247,14 @@ void Display::drawMemoryMeter(const MemoryMetrics& metrics, int y) {
 
 void Display::drawDiskMeter(const DiskMetrics& metrics, int y) {
     // Draw label and value
-    drawText(4, y + meterHeight_/2 - charHeight_/2, "DISK", textColor_);
+    drawText(4, y + meterHeight_/2 - charHeight_/2, "DISK", labelColor_);
     
     std::string valStr = formatBytes(metrics.readBytes + metrics.writeBytes);
     drawRightAlignedText(labelWidth_, y + meterHeight_/2 - charHeight_/2, valStr, valueColor_);
     
     // Draw legend above the bar
     std::vector<std::string> labels = {"READ", "WRITE", "IDLE"};
-    std::vector<SDL_Color> colors = {textColor_, diskWriteColor_, textColor_};
+    std::vector<SDL_Color> colors = {textColor_, diskWriteColor_, cpuIdleColor_};
     drawLegend(labelWidth_ + 16, y - charHeight_ - 5, labels, colors);
     
     // Calculate disk usage as percentage
@@ -271,14 +271,14 @@ void Display::drawDiskMeter(const DiskMetrics& metrics, int y) {
 
 void Display::drawNetworkMeter(const NetworkMetrics& metrics, int y) {
     // Draw label and value
-    drawText(4, y + meterHeight_/2 - charHeight_/2, "NET", textColor_);
+    drawText(4, y + meterHeight_/2 - charHeight_/2, "NET", labelColor_);
     
     std::string valStr = formatBytes(metrics.bytesIn + metrics.bytesOut);
     drawRightAlignedText(labelWidth_, y + meterHeight_/2 - charHeight_/2, valStr, valueColor_);
     
     // Draw legend above the bar
     std::vector<std::string> labels = {"IN", "OUT", "IDLE"};
-    std::vector<SDL_Color> colors = {netInColor_, textColor_, textColor_};
+    std::vector<SDL_Color> colors = {netInColor_, netOutColor_, cpuIdleColor_};
     drawLegend(labelWidth_ + 16, y - charHeight_ - 5, labels, colors);
     
     // Calculate network usage as percentage
@@ -295,12 +295,12 @@ void Display::drawNetworkMeter(const NetworkMetrics& metrics, int y) {
 
 void Display::drawIRQMeter(int irqCount, int y) {
     // Draw label and value
-    drawText(4, y + meterHeight_/2 - charHeight_/2, "IRQS", textColor_);
+    drawText(4, y + meterHeight_/2 - charHeight_/2, "IRQS", labelColor_);
     drawRightAlignedText(labelWidth_, y + meterHeight_/2 - charHeight_/2, std::to_string(irqCount), valueColor_);
     
     // Draw legend above the bar
     std::vector<std::string> labels = {"IRQs per sec", "IDLE"};
-    std::vector<SDL_Color> colors = {irqColor_, textColor_};
+    std::vector<SDL_Color> colors = {irqColor_, cpuIdleColor_};
     drawLegend(labelWidth_ + 16, y - charHeight_ - 5, labels, colors);
     
     // Calculate IRQ usage as percentage (max 1000 IRQs/sec as 100%)
