@@ -86,8 +86,11 @@ bool Display::initialize() {
         nullptr
     };
     
+    // Calculate initial font size
+    int initialFontSize = std::max(19, height_ / 20);
+    
     for (int i = 0; fontPaths[i]; i++) {
-        font_ = TTF_OpenFont(fontPaths[i], 16);
+        font_ = TTF_OpenFont(fontPaths[i], initialFontSize);
         if (font_) {
             break;
         }
@@ -95,7 +98,7 @@ bool Display::initialize() {
     
     if (!font_) {
         // Fallback to default-font
-        font_ = TTF_OpenFont("/System/Library/Fonts/Helvetica.ttc", 16);
+        font_ = TTF_OpenFont("/System/Library/Fonts/Helvetica.ttc", initialFontSize);
     }
     
     return true;
@@ -146,8 +149,8 @@ void Display::updateLayout() {
     
     // Exact calculations - no magic numbers
     // Divide window height evenly for 5 meters with spacing
-    meterHeight_ = (height_ - (NUM_METERS + 2) * METER_SPACING) / NUM_METERS;
-    meterYStart_ = METER_SPACING * 2;  // Add extra spacing at top
+    meterHeight_ = (height_ - (NUM_METERS + 1) * METER_SPACING) / NUM_METERS;
+    meterYStart_ = METER_SPACING;  // Add extra spacing at top
     
     // Calculate exact positions
     labelWidth_ = width_ / 8 + METER_SPACING;      // 12.5% of window width
@@ -159,12 +162,14 @@ void Display::updateLayout() {
     printf("Meter width: %d (from x=%d to x=%d)\n", meterWidth_, meterX_, meterX_ + meterWidth_);
     
     // Font size proportional to window
-    int fontSize = std::max(12, height_ / 20);
+    int fontSize = std::max(19, height_ / 20);
     if (font_) {
         TTF_SetFontSize(font_, fontSize);
     }
     charWidth_ = fontSize * 0.6;   // Approximate character width
     charHeight_ = fontSize;
+    
+    printf("Font size: %d (height=%d)\n", fontSize, height_);
     
     // Ensure minimum sizes
     charWidth_ = std::max(8, charWidth_);
@@ -208,7 +213,7 @@ void Display::drawCPUMeter(const std::vector<CPUMetrics>& metrics, int y) {
     // Draw legend above the bar
     std::vector<std::string> labels = {"USR", "SYS", "IDLE"};
     std::vector<SDL_Color> colors = {cpuUserColor_, cpuSystemColor_, textColor_};
-    drawLegend(meterX_, y - charHeight_ - 5, labels, colors);
+    drawLegend(labelWidth_ + 16, y - charHeight_ - 5, labels, colors);
     
     // Draw horizontal meter
     std::vector<double> values = {user, system, idle};
@@ -226,7 +231,7 @@ void Display::drawMemoryMeter(const MemoryMetrics& metrics, int y) {
     // Draw legend above the bar
     std::vector<std::string> labels = {"USED", "BUFF", "SLAB", "FREE"};
     std::vector<SDL_Color> colors = {textColor_, {173, 216, 230, 255}, {0, 0, 139, 255}, memFreeColor_};
-    drawLegend(meterX_, y - charHeight_ - 5, labels, colors);
+    drawLegend(labelWidth_ + 16, y - charHeight_ - 5, labels, colors);
     
     // Calculate memory components
     double used = (double)metrics.used / metrics.total * 100.0;
@@ -250,7 +255,7 @@ void Display::drawDiskMeter(const DiskMetrics& metrics, int y) {
     // Draw legend above the bar
     std::vector<std::string> labels = {"READ", "WRITE", "IDLE"};
     std::vector<SDL_Color> colors = {textColor_, diskWriteColor_, textColor_};
-    drawLegend(meterX_, y - charHeight_ - 5, labels, colors);
+    drawLegend(labelWidth_ + 16, y - charHeight_ - 5, labels, colors);
     
     // Calculate disk usage as percentage
     double maxBytes = 10.0 * 1024.0 * 1024.0; // 10MB/s as 100%
@@ -274,7 +279,7 @@ void Display::drawNetworkMeter(const NetworkMetrics& metrics, int y) {
     // Draw legend above the bar
     std::vector<std::string> labels = {"IN", "OUT", "IDLE"};
     std::vector<SDL_Color> colors = {netInColor_, textColor_, textColor_};
-    drawLegend(meterX_, y - charHeight_ - 5, labels, colors);
+    drawLegend(labelWidth_ + 16, y - charHeight_ - 5, labels, colors);
     
     // Calculate network usage as percentage
     double maxBytes = 10.0 * 1024.0 * 1024.0; // 10MB/s as 100%
@@ -296,7 +301,7 @@ void Display::drawIRQMeter(int irqCount, int y) {
     // Draw legend above the bar
     std::vector<std::string> labels = {"IRQs per sec", "IDLE"};
     std::vector<SDL_Color> colors = {irqColor_, textColor_};
-    drawLegend(meterX_, y - charHeight_ - 5, labels, colors);
+    drawLegend(labelWidth_ + 16, y - charHeight_ - 5, labels, colors);
     
     // Calculate IRQ usage as percentage (max 1000 IRQs/sec as 100%)
     double irqUsage = std::min(100.0, (double)irqCount / 10.0);

@@ -1,0 +1,24 @@
+# Build directories
+build/
+cmake-build-*/
+
+# Executable
+Xosview
+
+# IDE files
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# CMake generated files
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+
+# Compiled object files
+*.o
+*.so
+*.dylib
