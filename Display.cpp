@@ -254,11 +254,27 @@ void Display::drawDiskMeter(const DiskMetrics& metrics, int y) {
     std::vector<SDL_Color> colors = {textColor_, diskWriteColor_, cpuIdleColor_};
     drawLegend(labelWidth_ + 16, y - charHeight_ - 5, labels, colors);
     
-    // Calculate disk usage as percentage
-    double maxBytes = 10.0 * 1024.0 * 1024.0; // 10MB/s as 100%
-    double read = std::min(100.0, metrics.readBytes / maxBytes * 100.0);
-    double write = std::min(100.0, metrics.writeBytes / maxBytes * 100.0);
-    double idle = std::max(0.0, 100.0 - read - write);
+    // Calculate disk usage using a logarithmic scale to avoid instant saturation
+    double maxBytes = 500.0 * 1024.0 * 1024.0; // 500MB/s as ~100%
+    auto logPercent = [maxBytes](double value) -> double {
+        if (value <= 0.0) {
+            return 0.0;
+        }
+        double denom = std::log10(1.0 + maxBytes);
+        if (denom <= 0.0) {
+            return 0.0;
+        }
+        double pct = std::log10(1.0 + value) / denom * 100.0;
+        return std::min(100.0, pct);
+    };
+    
+    double totalBytes = metrics.readBytes + metrics.writeBytes;
+    double totalPct = logPercent(totalBytes);
+    double readRatio = totalBytes > 0 ? static_cast<double>(metrics.readBytes) / totalBytes : 0.0;
+    double writeRatio = totalBytes > 0 ? static_cast<double>(metrics.writeBytes) / totalBytes : 0.0;
+    double read = totalPct * readRatio;
+    double write = totalPct * writeRatio;
+    double idle = std::max(0.0, 100.0 - std::min(100.0, read + write));
     
     // Draw horizontal meter
     std::vector<double> values = {read, write, idle};
@@ -278,11 +294,27 @@ void Display::drawNetworkMeter(const NetworkMetrics& metrics, int y) {
     std::vector<SDL_Color> colors = {netInColor_, netOutColor_, cpuIdleColor_};
     drawLegend(labelWidth_ + 16, y - charHeight_ - 5, labels, colors);
     
-    // Calculate network usage as percentage
-    double maxBytes = 10.0 * 1024.0 * 1024.0; // 10MB/s as 100%
-    double in = std::min(100.0, metrics.bytesIn / maxBytes * 100.0);
-    double out = std::min(100.0, metrics.bytesOut / maxBytes * 100.0);
-    double idle = std::max(0.0, 100.0 - in - out);
+    // Calculate network usage using a logarithmic scale similar to disk
+    double maxBytes = 2.0 * 1024.0 * 1024.0 * 1024.0; // 2GB/s ~= 100%
+    auto logPercent = [maxBytes](double value) -> double {
+        if (value <= 0.0) {
+            return 0.0;
+        }
+        double denom = std::log10(1.0 + maxBytes);
+        if (denom <= 0.0) {
+            return 0.0;
+        }
+        double pct = std::log10(1.0 + value) / denom * 100.0;
+        return std::min(100.0, pct);
+    };
+    
+    double totalBytes = metrics.bytesIn + metrics.bytesOut;
+    double totalPct = logPercent(totalBytes);
+    double inRatio = totalBytes > 0 ? static_cast<double>(metrics.bytesIn) / totalBytes : 0.0;
+    double outRatio = totalBytes > 0 ? static_cast<double>(metrics.bytesOut) / totalBytes : 0.0;
+    double in = totalPct * inRatio;
+    double out = totalPct * outRatio;
+    double idle = std::max(0.0, 100.0 - std::min(100.0, in + out));
     
     // Draw horizontal meter
     std::vector<double> values = {in, out, idle};
