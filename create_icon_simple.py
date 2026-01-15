@@ -49,13 +49,14 @@ def create_simple_icon():
 </svg>'''
     
     # Save SVG
-    svg_path = "/Users/robert/programming/C++/Xosview/OSXView.app/Contents/Resources/AppIcon.svg"
+    svg_path = "OSXView.app/Contents/Resources/AppIcon.svg"
+    os.makedirs(os.path.dirname(svg_path), exist_ok=True)
     with open(svg_path, 'w') as f:
         f.write(svg_content)
     print(f"SVG icon created at: {svg_path}")
     
     # Try to convert to PNG using system tools
-    png_path = "/Users/robert/programming/C++/Xosview/OSXView.app/Contents/Resources/AppIcon.png"
+    png_path = "OSXView.app/Contents/Resources/AppIcon.png"
     
     # Use sips (built into macOS) to convert SVG to PNG
     import subprocess
@@ -71,7 +72,7 @@ def create_simple_icon():
         print("sips not available")
     
     # Fallback: create a simple script to use iconutil if available
-    iconset_path = "/Users/robert/programming/C++/Xosview/OSXView.app/Contents/Resources/AppIcon.iconset"
+    iconset_path = "OSXView.app/Contents/Resources/AppIcon.iconset"
     os.makedirs(iconset_path, exist_ok=True)
     
     # Try using iconutil (built into macOS)

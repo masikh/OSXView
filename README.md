@@ -1,6 +1,6 @@
-# Xosview Clone for macOS
+# OSXview Clone for macOS
 
-A C++ clone of the classic Xosview system monitor for macOS, built with SDL2.
+A C++ clone of the classic OSXview system monitor for macOS, built with SDL2.
 
 ## Features
 
@@ -26,15 +26,13 @@ brew install sdl2
 
 2. Build the project:
 ```bash
-mkdir build
-cd build
-cmake ..
-make
+cmake --build cmake-build-debug --target OSXview
+cmake --build cmake-build-debug --target bundle_script
 ```
 
 3. Run the application:
 ```bash
-./Xosview
+./OSXview
 ```
 
 ## Usage
@@ -59,7 +57,7 @@ make
 
 ## Screenshot
 
-The application resembles the classic Xosview appearance with:
+The application resembles the classic OSXview appearance with:
 - Dark background
 - Colored meters for CPU (red=user, yellow=system, gray=idle)
 - Blue memory meter

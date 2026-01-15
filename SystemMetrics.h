@@ -1,5 +1,5 @@
-#ifndef XOSVIEW_SYSTEMMETRICS_H
-#define XOSVIEW_SYSTEMMETRICS_H
+#ifndef OSXVIEW_SYSTEMMETRICS_H
+#define OSXVIEW_SYSTEMMETRICS_H
 
 #include <vector>
 #include <cstdint>
@@ -97,4 +97,4 @@ private:
     io_iterator_t diskIter_;
 };
 
-#endif //XOSVIEW_SYSTEMMETRICS_H
+#endif //OSXVIEW_SYSTEMMETRICS_H

@@ -3,7 +3,7 @@ build/
 cmake-build-*/
 
 # Executable
-Xosview
+OSXview
 
 # IDE files
 .idea/

@@ -80,7 +80,7 @@ def create_icon():
     return img
 
 def main():
-    icon_path = "/Users/robert/programming/C++/Xosview/OSXView.app/Contents/Resources/AppIcon.png"
+    icon_path = "//OSXView.app/Contents/Resources/AppIcon.png"
     
     # Create the icon
     icon = create_icon()
@@ -88,7 +88,7 @@ def main():
     print(f"Icon created at: {icon_path}")
     
     # Also create iconset for better macOS integration
-    iconset_path = "/Users/robert/programming/C++/Xosview/OSXView.app/Contents/Resources/AppIcon.iconset"
+    iconset_path = "//OSXView.app/Contents/Resources/AppIcon.iconset"
     os.makedirs(iconset_path, exist_ok=True)
     
     # Generate multiple sizes for iconset

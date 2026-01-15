@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(Xosview)
+project(OSXview)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -24,14 +24,14 @@ find_library(COREFOUNDATION_LIBRARY CoreFoundation)
 find_library(SYSTEMCONFIGURATION_LIBRARY SystemConfiguration)
 
 # Add executable
-add_executable(Xosview MACOSX_BUNDLE
+add_executable(OSXview MACOSX_BUNDLE
     main.cpp
     SystemMetrics.cpp
     Display.cpp
 )
 
 # Set bundle properties
-set_target_properties(Xosview PROPERTIES
+set_target_properties(OSXview PROPERTIES
     MACOSX_BUNDLE_INFO_PLIST "${CMAKE_SOURCE_DIR}/Info.plist"
     MACOSX_BUNDLE_BUNDLE_NAME "OSXView"
     MACOSX_BUNDLE_BUNDLE_VERSION "1.0"
@@ -41,30 +41,17 @@ set_target_properties(Xosview PROPERTIES
 )
 
 # Copy icon to bundle resources
-add_custom_command(TARGET Xosview POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-    "${CMAKE_SOURCE_DIR}/OSXView.app/Contents/Resources"
-    "${APP_RESOURCES_DIR}"
-)
+# Note: Resources are copied in create_app_bundle target instead
 
-# Create a standalone app bundle after build
-add_custom_target(create_app_bundle ALL
-    COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:Xosview> "${APP_MACOS_DIR}/"
-    COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_SOURCE_DIR}/Info.plist" "${APP_CONTENTS_DIR}/"
-    COMMAND ${CMAKE_COMMAND} -E make_directory "${APP_RESOURCES_DIR}"
-    COMMAND cp -r "${CMAKE_SOURCE_DIR}/OSXView.app/Contents/Resources"/* "${APP_RESOURCES_DIR}/"
-    COMMAND ${CMAKE_COMMAND} -E make_directory "${APP_CONTENTS_DIR}/Frameworks"
-    COMMAND cp /opt/homebrew/lib/libSDL2-2.0.0.dylib "${APP_CONTENTS_DIR}/Frameworks/"
-    COMMAND cp /opt/homebrew/lib/libSDL2_ttf-2.0.0.dylib "${APP_CONTENTS_DIR}/Frameworks/"
-    COMMAND install_name_tool -change /opt/homebrew/lib/libSDL2-2.0.0.dylib "@executable_path/../Frameworks/libSDL2-2.0.0.dylib" "${APP_MACOS_DIR}/Xosview"
-    COMMAND install_name_tool -change /opt/homebrew/lib/libSDL2_ttf-2.0.0.dylib "@executable_path/../Frameworks/libSDL2_ttf-2.0.0.dylib" "${APP_MACOS_DIR}/Xosview"
-    COMMAND codesign --force --deep --sign - "${APP_BUNDLE_DIR}"
-    DEPENDS Xosview
-    COMMENT "Creating standalone app bundle with bundled frameworks"
+# Add a script to create the standalone app bundle
+add_custom_target(bundle_script ALL
+    COMMAND ${CMAKE_COMMAND} -P ${CMAKE_SOURCE_DIR}/create_bundle.cmake
+    DEPENDS OSXview
+    COMMENT "Creating standalone app bundle"
 )
 
 # Link libraries
-target_link_libraries(Xosview 
+target_link_libraries(OSXview
     ${SDL2_LIBRARIES}
     ${SDL2_TTF_LIBRARIES}
     ${IOKIT_LIBRARY}
@@ -73,10 +60,10 @@ target_link_libraries(Xosview
 )
 
 # Add library paths
-target_link_directories(Xosview PRIVATE 
+target_link_directories(OSXview PRIVATE
     ${SDL2_LIBRARY_DIRS}
     ${SDL2_TTF_LIBRARY_DIRS}
 )
 
 # Set compiler flags
-target_compile_options(Xosview PRIVATE -Wall -Wextra)
+target_compile_options(OSXview PRIVATE -Wall -Wextra)

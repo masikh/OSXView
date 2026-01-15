@@ -1,8 +1,8 @@
 #!/bin/bash
 
-# Build script for Xosview on macOS
+# Build script for OSXview on macOS
 
-echo "Building Xosview..."
+echo "Building OSXview..."
 
 # Check if SDL2 is installed
 if ! brew list sdl2 &> /dev/null; then
@@ -28,4 +28,4 @@ cmake .. -DCMAKE_BUILD_TYPE=Release
 echo "Building..."
 make -j$(sysctl -n hw.ncpu)
 
-echo "Build complete! Run with: ./build/Xosview"
+echo "Build complete! Run with: ./build/OSXview"

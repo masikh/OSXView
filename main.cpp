@@ -71,7 +71,7 @@ int main() {
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
     
-    std::cout << "\nShutting down Xosview..." << std::endl;
+    std::cout << "\nShutting down OSXview..." << std::endl;
     
     return 0;
 }

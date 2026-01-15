@@ -1,5 +1,5 @@
-#ifndef XOSVIEW_DISPLAY_H
-#define XOSVIEW_DISPLAY_H
+#ifndef OSXVIEW_DISPLAY_H
+#define OSXVIEW_DISPLAY_H
 
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_ttf.h>
@@ -100,4 +100,4 @@ private:
     std::string formatValue(double value, const std::string& unit) const;
 };
 
-#endif //XOSVIEW_DISPLAY_H
+#endif //OSXVIEW_DISPLAY_H
