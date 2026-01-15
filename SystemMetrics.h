@@ -7,6 +7,7 @@
 #include <sys/sysctl.h>
 #include <mach/mach.h>
 #include <mach/vm_statistics.h>
+#include <chrono>
 #include <IOKit/IOKitLib.h>
 #include <CoreFoundation/CoreFoundation.h>
 
@@ -87,6 +88,10 @@ private:
     uint64_t prevPacketsOut_;
     uint64_t prevDiskRead_;
     uint64_t prevDiskWrite_;
+    uint64_t prevDiskReadOps_;
+    uint64_t prevDiskWriteOps_;
+    bool diskStatsInitialized_;
+    std::chrono::steady_clock::time_point lastDiskSample_;
     
     io_iterator_t networkIter_;
     io_iterator_t diskIter_;

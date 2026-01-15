@@ -1,6 +1,8 @@
 #include "SystemMetrics.h"
 #include <IOKit/network/IOEthernetInterface.h>
 #include <IOKit/storage/IOBlockStorageDevice.h>
+#include <IOKit/storage/IOBlockStorageDriver.h>
+#include <IOKit/storage/IOMedia.h>
 #include <IOKit/ps/IOPowerSources.h>
 #include <IOKit/ps/IOPSKeys.h>
 #include <sys/param.h>
@@ -8,14 +10,59 @@
 #include <sys/mount.h>
 #include <net/if.h>
 #include <net/route.h>
+#include <cstdlib>
 #include <net/if_types.h>
 #include <sys/socket.h>
 #include <sys/types.h>
+
+namespace {
+
+template <typename T, size_t N>
+constexpr size_t arraySize(const T (&)[N]) {
+    return N;
+}
+
+bool tryGetDictionaryValue(CFDictionaryRef dict, CFStringRef key, uint64_t& outValue) {
+    if (!dict || !key) {
+        return false;
+    }
+
+    CFNumberRef number = (CFNumberRef)CFDictionaryGetValue(dict, key);
+    if (!number) {
+        return false;
+    }
+
+    int64_t value = 0;
+    if (!CFNumberGetValue(number, kCFNumberSInt64Type, &value)) {
+        return false;
+    }
+
+    if (value < 0) {
+        return false;
+    }
+
+    outValue = static_cast<uint64_t>(value);
+    return true;
+}
+
+bool tryGetDictionaryValue(CFDictionaryRef dict, const CFStringRef* keys, size_t keyCount, uint64_t& outValue) {
+    for (size_t i = 0; i < keyCount; ++i) {
+        if (tryGetDictionaryValue(dict, keys[i], outValue)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+} // namespace
 
 SystemMetrics::SystemMetrics() 
     : machPort_(0), prevCpuLoad_(nullptr), numCpus_(0),
       prevNetworkIn_(0), prevNetworkOut_(0), prevPacketsIn_(0), prevPacketsOut_(0),
       prevDiskRead_(0), prevDiskWrite_(0),
+      prevDiskReadOps_(0), prevDiskWriteOps_(0),
+      diskStatsInitialized_(false),
+      lastDiskSample_(std::chrono::steady_clock::now()),
       networkIter_(0), diskIter_(0) {
 }
 
@@ -203,70 +250,118 @@ void SystemMetrics::updateNetwork() {
 }
 
 void SystemMetrics::updateDisk() {
-    // Get disk I/O statistics using IOKit
-    io_iterator_t iter;
-    kern_return_t kr = IOServiceGetMatchingServices(kIOMainPortDefault,
-                                                    IOServiceMatching("IOBlockStorageDriver"),
-                                                    &iter);
+    auto now = std::chrono::steady_clock::now();
+    double intervalSeconds = std::chrono::duration<double>(now - lastDiskSample_).count();
+    if (!diskStatsInitialized_ || intervalSeconds <= 0.0) {
+        intervalSeconds = 1.0;
+    }
+
+    CFMutableDictionaryRef matching = IOServiceMatching("IOBlockStorageDriver");
+    if (!matching) {
+        return;
+    }
+
+    io_iterator_t iterator = IO_OBJECT_NULL;
+    kern_return_t kr = IOServiceGetMatchingServices(kIOMainPortDefault, matching, &iterator);
     if (kr != KERN_SUCCESS) {
         return;
     }
-    
-    uint64_t totalRead = 0, totalWrite = 0;
-    uint64_t readOps = 0, writeOps = 0;
-    
-    io_object_t obj;
-    while ((obj = IOIteratorNext(iter)) != 0) {
+
+    uint64_t totalRead = 0;
+    uint64_t totalWrite = 0;
+    uint64_t totalReadOps = 0;
+    uint64_t totalWriteOps = 0;
+
+    io_object_t object = IO_OBJECT_NULL;
+    while ((object = IOIteratorNext(iterator)) != IO_OBJECT_NULL) {
         CFDictionaryRef stats = (CFDictionaryRef)IORegistryEntryCreateCFProperty(
-            obj, CFSTR("IOBlockStorageDriverStatistics"),
-            kCFAllocatorDefault, 0);
-        
+            object, CFSTR(kIOBlockStorageDriverStatisticsKey), kCFAllocatorDefault, 0);
+        if (!stats) {
+            stats = (CFDictionaryRef)IORegistryEntryCreateCFProperty(
+                object, CFSTR("IOBlockStorageDriverStatistics"), kCFAllocatorDefault, 0);
+        }
+        if (!stats) {
+            stats = (CFDictionaryRef)IORegistryEntryCreateCFProperty(
+                object, CFSTR("Statistics"), kCFAllocatorDefault, 0);
+        }
+
         if (stats) {
-            CFNumberRef num;
-            
-            num = (CFNumberRef)CFDictionaryGetValue(stats, CFSTR("BytesRead"));
-            if (num) {
-                uint64_t value;
-                CFNumberGetValue(num, kCFNumberSInt64Type, &value);
+            const CFStringRef readByteKeys[] = {
+                CFSTR("Bytes (Read)"),
+                CFSTR("Bytes Read"),
+                CFSTR("BytesRead")
+            };
+            const CFStringRef writeByteKeys[] = {
+                CFSTR("Bytes (Write)"),
+                CFSTR("Bytes Written"),
+                CFSTR("BytesWritten")
+            };
+            const CFStringRef readOpKeys[] = {
+                CFSTR("Operations (Read)"),
+                CFSTR("Read Operations"),
+                CFSTR("Reads")
+            };
+            const CFStringRef writeOpKeys[] = {
+                CFSTR("Operations (Write)"),
+                CFSTR("Write Operations"),
+                CFSTR("Writes")
+            };
+
+            uint64_t value = 0;
+
+            if (tryGetDictionaryValue(stats, readByteKeys, arraySize(readByteKeys), value)) {
                 totalRead += value;
             }
-            
-            num = (CFNumberRef)CFDictionaryGetValue(stats, CFSTR("BytesWritten"));
-            if (num) {
-                uint64_t value;
-                CFNumberGetValue(num, kCFNumberSInt64Type, &value);
+            if (tryGetDictionaryValue(stats, writeByteKeys, arraySize(writeByteKeys), value)) {
                 totalWrite += value;
             }
-            
-            num = (CFNumberRef)CFDictionaryGetValue(stats, CFSTR("Reads"));
-            if (num) {
-                uint32_t value;
-                CFNumberGetValue(num, kCFNumberSInt32Type, &value);
-                readOps += value;
+            if (tryGetDictionaryValue(stats, readOpKeys, arraySize(readOpKeys), value)) {
+                totalReadOps += value;
             }
-            
-            num = (CFNumberRef)CFDictionaryGetValue(stats, CFSTR("Writes"));
-            if (num) {
-                uint32_t value;
-                CFNumberGetValue(num, kCFNumberSInt32Type, &value);
-                writeOps += value;
+            if (tryGetDictionaryValue(stats, writeOpKeys, arraySize(writeOpKeys), value)) {
+                totalWriteOps += value;
             }
-            
+
             CFRelease(stats);
         }
-        
-        IOObjectRelease(obj);
+
+        IOObjectRelease(object);
     }
-    
-    IOObjectRelease(iter);
-    
-    diskMetrics_.readBytes = totalRead - prevDiskRead_;
-    diskMetrics_.writeBytes = totalWrite - prevDiskWrite_;
-    diskMetrics_.readOps = readOps;
-    diskMetrics_.writeOps = writeOps;
-    
+
+    IOObjectRelease(iterator);
+
+    if (!diskStatsInitialized_) {
+        prevDiskRead_ = totalRead;
+        prevDiskWrite_ = totalWrite;
+        prevDiskReadOps_ = totalReadOps;
+        prevDiskWriteOps_ = totalWriteOps;
+        diskStatsInitialized_ = true;
+        lastDiskSample_ = now;
+        diskMetrics_.readBytes = 0;
+        diskMetrics_.writeBytes = 0;
+        diskMetrics_.readOps = 0;
+        diskMetrics_.writeOps = 0;
+        return;
+    }
+
+    auto rateFromDelta = [intervalSeconds](uint64_t current, uint64_t previous) -> uint64_t {
+        if (current <= previous) {
+            return 0;
+        }
+        double delta = static_cast<double>(current - previous);
+        return static_cast<uint64_t>(delta / intervalSeconds);
+    };
+
+    diskMetrics_.readBytes = rateFromDelta(totalRead, prevDiskRead_);
+    diskMetrics_.writeBytes = rateFromDelta(totalWrite, prevDiskWrite_);
+    diskMetrics_.readOps = rateFromDelta(totalReadOps, prevDiskReadOps_);
+    diskMetrics_.writeOps = rateFromDelta(totalWriteOps, prevDiskWriteOps_);
+
     prevDiskRead_ = totalRead;
     prevDiskWrite_ = totalWrite;
+    prevDiskReadOps_ = totalReadOps;
+    prevDiskWriteOps_ = totalWriteOps;
+    lastDiskSample_ = now;
 }
 
 void SystemMetrics::updateSystemInfo() {

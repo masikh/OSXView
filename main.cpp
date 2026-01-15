@@ -23,8 +23,8 @@ int main() {
         return 1;
     }
     
-    // Initialize display 580 388 -> 280 194
-    Display display(280, 194);
+    // Initialize display 580 388 -> 280 120
+    Display display(280, 200);
     if (!display.initialize()) {
         std::cerr << "Failed to initialize display" << std::endl;
         return 1;

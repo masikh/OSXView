@@ -9,7 +9,7 @@
 
 class Display {
 public:
-    Display(int width = 580, int height = 388);
+    Display(int width = 580, int height = 200);
     ~Display();
     
     bool initialize();
@@ -61,7 +61,7 @@ private:
     SDL_Color irqIdleColor_;
     
     // Dynamic layout constants
-    static const int NUM_METERS = 5;
+    static const int NUM_METERS = 4;
     static const int METER_SPACING = 40;
     static const int LABEL_X = 10;
     static const int VALUE_X = 100;

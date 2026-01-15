@@ -191,9 +191,6 @@ void Display::draw(const SystemMetrics& metrics) {
     y += meterHeight_ + METER_SPACING;
     
     drawNetworkMeter(metrics.getNetworkMetrics(), y);
-    y += meterHeight_ + METER_SPACING;
-    
-    drawIRQMeter(metrics.getIRQCount(), y);
 }
 
 void Display::drawCPUMeter(const std::vector<CPUMetrics>& metrics, int y) {
@@ -249,7 +246,7 @@ void Display::drawDiskMeter(const DiskMetrics& metrics, int y) {
     // Draw label and value
     drawText(4, y + meterHeight_/2 - charHeight_/2, "DISK", labelColor_);
     
-    std::string valStr = formatBytes(metrics.readBytes + metrics.writeBytes);
+    std::string valStr = formatBytes(metrics.readBytes + metrics.writeBytes) + "/s";
     drawRightAlignedText(labelWidth_, y + meterHeight_/2 - charHeight_/2, valStr, valueColor_);
     
     // Draw legend above the bar
