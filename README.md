@@ -1,6 +1,6 @@
-# OSXview Clone for macOS
+# Xosview Clone for macOS (OSXview)
 
-A C++ clone of the classic OSXview system monitor for macOS, built with SDL2.
+A C++ clone of the classic Xosview system monitor for macOS, built with SDL2.
 
 ## Features
 
@@ -11,7 +11,9 @@ A C++ clone of the classic OSXview system monitor for macOS, built with SDL2.
 
 ## Demo
 
-![OSXview Demo](OSXview.mov)
+<video width="100%" controls>
+  <source src="https://raw.githubusercontent.com/masikh/OSXView/main/OSXview.mp4" type="video/mp4">
+</video>
 
 ## Dependencies
 
@@ -34,35 +36,5 @@ cmake --build cmake-build-debug --target bundle_script
 
 3. Run the application:
 ```bash
-./OSXview
+./OSXview.app/Contents/MacOS/OSXview (or click ./OSXview.app)
 ```
-
-## Usage
-
-- The window displays real-time system metrics updated every second
-- Press Ctrl+C or close the window to exit
-
-## Controls
-
-- Close the window to quit
-- The application updates automatically every second
-
-## Implementation Details
-
-- Uses macOS-specific APIs for system metrics:
-  - `host_processor_info()` for CPU usage
-  - `vm_statistics64` for memory statistics
-  - IOKit for network and disk I/O
-  - `sysctl()` for load average and process count
-- SDL2 for cross-platform graphics rendering
-- C++20 standard
-
-## Screenshot
-
-The application resembles the classic OSXview appearance with:
-- Dark background
-- Colored meters for CPU (red=user, yellow=system, gray=idle)
-- Blue memory meter
-- Orange swap meter
-- Green/purple network graphs
-- Blue/orange disk graphs
