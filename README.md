@@ -4,12 +4,14 @@ A C++ clone of the classic OSXview system monitor for macOS, built with SDL2.
 
 ## Features
 
-- Real-time CPU usage monitoring (per-core)
-- Memory and swap usage display
+- Real-time CPU usage monitoring
+- Memory display
 - Network I/O graphs (in/out)
 - Disk I/O graphs (read/write)
-- Load average display
-- Process count
+
+## Demo
+
+https://github.com/user-attachments/assets/OSXview.mov
 
 ## Dependencies
 
