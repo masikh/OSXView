@@ -92,6 +92,8 @@ private:
     uint64_t prevDiskWriteOps_;
     bool diskStatsInitialized_;
     std::chrono::steady_clock::time_point lastDiskSample_;
+    std::chrono::steady_clock::time_point lastNetworkSample_;
+    std::chrono::steady_clock::time_point lastSystemInfoSample_;
     
     io_iterator_t networkIter_;
     io_iterator_t diskIter_;

@@ -17,6 +17,10 @@
 
 namespace {
 
+const auto kNetworkUpdateInterval = std::chrono::milliseconds(333);
+const auto kDiskUpdateInterval = std::chrono::milliseconds(1500);
+const auto kSystemInfoUpdateInterval = std::chrono::milliseconds(333);
+
 template <typename T, size_t N>
 constexpr size_t arraySize(const T (&)[N]) {
     return N;
@@ -62,7 +66,9 @@ SystemMetrics::SystemMetrics()
       prevDiskRead_(0), prevDiskWrite_(0),
       prevDiskReadOps_(0), prevDiskWriteOps_(0),
       diskStatsInitialized_(false),
-      lastDiskSample_(std::chrono::steady_clock::now()),
+      lastDiskSample_(),
+      lastNetworkSample_(),
+      lastSystemInfoSample_(),
       networkIter_(0), diskIter_(0) {
 }
 
@@ -202,6 +208,13 @@ void SystemMetrics::updateSwap() {
 }
 
 void SystemMetrics::updateNetwork() {
+    auto now = std::chrono::steady_clock::now();
+    if (lastNetworkSample_.time_since_epoch().count() != 0 &&
+        now - lastNetworkSample_ < kNetworkUpdateInterval) {
+        return;
+    }
+    lastNetworkSample_ = now;
+
     // Get network interface statistics
     int mib[] = {CTL_NET, PF_ROUTE, 0, 0, NET_RT_IFLIST2, 0};
     size_t len;
@@ -251,10 +264,17 @@ void SystemMetrics::updateNetwork() {
 
 void SystemMetrics::updateDisk() {
     auto now = std::chrono::steady_clock::now();
-    double intervalSeconds = std::chrono::duration<double>(now - lastDiskSample_).count();
-    if (!diskStatsInitialized_ || intervalSeconds <= 0.0) {
+    if (diskStatsInitialized_ && now - lastDiskSample_ < kDiskUpdateInterval) {
+        return;
+    }
+    double intervalSeconds = diskStatsInitialized_
+        ? std::chrono::duration<double>(now - lastDiskSample_).count()
+        : 1.0;
+    if (intervalSeconds <= 0.0) {
         intervalSeconds = 1.0;
     }
+
+    lastDiskSample_ = now;
 
     CFMutableDictionaryRef matching = IOServiceMatching("IOBlockStorageDriver");
     if (!matching) {
@@ -336,7 +356,6 @@ void SystemMetrics::updateDisk() {
         prevDiskReadOps_ = totalReadOps;
         prevDiskWriteOps_ = totalWriteOps;
         diskStatsInitialized_ = true;
-        lastDiskSample_ = now;
         diskMetrics_.readBytes = 0;
         diskMetrics_.writeBytes = 0;
         diskMetrics_.readOps = 0;
@@ -361,10 +380,16 @@ void SystemMetrics::updateDisk() {
     prevDiskWrite_ = totalWrite;
     prevDiskReadOps_ = totalReadOps;
     prevDiskWriteOps_ = totalWriteOps;
-    lastDiskSample_ = now;
 }
 
 void SystemMetrics::updateSystemInfo() {
+    auto now = std::chrono::steady_clock::now();
+    if (lastSystemInfoSample_.time_since_epoch().count() != 0 &&
+        now - lastSystemInfoSample_ < kSystemInfoUpdateInterval) {
+        return;
+    }
+    lastSystemInfoSample_ = now;
+
     // Get load average
     getloadavg(systemInfo_.loadAverage, 3);
     

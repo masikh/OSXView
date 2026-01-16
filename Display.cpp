@@ -3,6 +3,81 @@
 #include <iomanip>
 #include <sstream>
 #include <cmath>
+#include <unordered_map>
+
+namespace {
+
+struct CachedTextEntry {
+    SDL_Texture* texture = nullptr;
+    int width = 0;
+    int height = 0;
+};
+
+std::unordered_map<std::string, CachedTextEntry> gTextCache;
+int gActiveFontSize = 0;
+
+void clearTextCache() {
+    for (auto& entry : gTextCache) {
+        if (entry.second.texture) {
+            SDL_DestroyTexture(entry.second.texture);
+        }
+    }
+    gTextCache.clear();
+}
+
+void setActiveFontSize(int fontSize) {
+    if (fontSize != gActiveFontSize) {
+        clearTextCache();
+        gActiveFontSize = fontSize;
+    }
+}
+
+std::string makeCacheKey(const std::string& text, const SDL_Color& color) {
+    std::ostringstream oss;
+    oss << gActiveFontSize << '|'
+        << static_cast<int>(color.r) << ','
+        << static_cast<int>(color.g) << ','
+        << static_cast<int>(color.b) << ','
+        << static_cast<int>(color.a) << '|'
+        << text;
+    return oss.str();
+}
+
+CachedTextEntry* ensureCachedText(SDL_Renderer* renderer,
+                                  TTF_Font* font,
+                                  const std::string& text,
+                                  const SDL_Color& color) {
+    if (!renderer || !font) {
+        return nullptr;
+    }
+    
+    const std::string key = makeCacheKey(text, color);
+    auto it = gTextCache.find(key);
+    if (it == gTextCache.end()) {
+        SDL_Surface* surface = TTF_RenderText_Solid(font, text.c_str(), color);
+        if (!surface) {
+            return nullptr;
+        }
+        
+        SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, surface);
+        if (!texture) {
+            SDL_FreeSurface(surface);
+            return nullptr;
+        }
+        
+        CachedTextEntry entry;
+        entry.texture = texture;
+        entry.width = surface->w;
+        entry.height = surface->h;
+        SDL_FreeSurface(surface);
+        
+        it = gTextCache.emplace(key, entry).first;
+    }
+    
+    return &it->second;
+}
+
+} // namespace
 
 Display::Display(int width, int height) 
     : window_(nullptr), renderer_(nullptr), font_(nullptr), width_(width), height_(height),
@@ -101,10 +176,14 @@ bool Display::initialize() {
         font_ = TTF_OpenFont("/System/Library/Fonts/Helvetica.ttc", initialFontSize);
     }
     
+    setActiveFontSize(initialFontSize);
+    
     return true;
 }
 
 void Display::cleanup() {
+    clearTextCache();
+    
     if (font_) {
         TTF_CloseFont(font_);
         font_ = nullptr;
@@ -164,7 +243,9 @@ void Display::updateLayout() {
     // Font size proportional to window
     int fontSize = std::max(19, height_ / 20);
     if (font_) {
-        TTF_SetFontSize(font_, fontSize);
+        if (TTF_SetFontSize(font_, fontSize) == 0) {
+            setActiveFontSize(fontSize);
+        }
     }
     charWidth_ = fontSize * 0.6;   // Approximate character width
     charHeight_ = fontSize;
@@ -385,34 +466,27 @@ void Display::drawLegend(int x, int y, const std::vector<std::string>& labels,
 }
 
 void Display::drawText(int x, int y, const std::string& text, const SDL_Color& color) {
-    if (!font_) return;
+    if (!renderer_ || !font_) return;
     
-    // Render text surface
-    SDL_Surface* surface = TTF_RenderText_Solid(font_, text.c_str(), color);
-    if (!surface) return;
-    
-    // Create texture
-    SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer_, surface);
-    if (!texture) {
-        SDL_FreeSurface(surface);
+    CachedTextEntry* cached = ensureCachedText(renderer_, font_, text, color);
+    if (!cached) {
         return;
     }
     
-    // Set render position and draw
-    SDL_Rect dstRect{x, y, surface->w, surface->h};
-    SDL_RenderCopy(renderer_, texture, nullptr, &dstRect);
-    
-    // Clean up
-    SDL_DestroyTexture(texture);
-    SDL_FreeSurface(surface);
+    SDL_Rect dstRect{x, y, cached->width, cached->height};
+    SDL_RenderCopy(renderer_, cached->texture, nullptr, &dstRect);
 }
 
 void Display::drawRightAlignedText(int x, int y, const std::string& text, const SDL_Color& color) {
-    if (!font_) return;
+    if (!renderer_ || !font_) return;
     
-    int textWidth;
-    TTF_SizeText(font_, text.c_str(), &textWidth, nullptr);
-    drawText(x - textWidth, y, text, color);
+    CachedTextEntry* cached = ensureCachedText(renderer_, font_, text, color);
+    if (!cached) {
+        return;
+    }
+    
+    SDL_Rect dstRect{x - cached->width, y, cached->width, cached->height};
+    SDL_RenderCopy(renderer_, cached->texture, nullptr, &dstRect);
 }
 
 void Display::drawMeterBorder(int x, int y, int width, int height) {

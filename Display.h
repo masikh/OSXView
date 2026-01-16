@@ -5,6 +5,7 @@
 #include <SDL2/SDL_ttf.h>
 #include <vector>
 #include <string>
+#include <unordered_map>
 #include "SystemMetrics.h"
 
 class Display {
