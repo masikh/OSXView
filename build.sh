@@ -1,31 +1,35 @@
 #!/bin/bash
+set -euo pipefail
 
-# Build script for OSXview on macOS
+PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BUILD_DIR="${PROJECT_ROOT}/build"
 
-echo "Building OSXview..."
+echo "=== OSXview bundler ==="
 
-# Check if SDL2 is installed
+if ! command -v brew >/dev/null; then
+    echo "Homebrew is required to install SDL dependencies." >&2
+    exit 1
+fi
+
 if ! brew list sdl2 &> /dev/null; then
-    echo "SDL2 not found. Installing..."
+    echo "Installing SDL2..."
     brew install sdl2
 fi
 
-# Check if SDL2_ttf is installed
 if ! brew list sdl2_ttf &> /dev/null; then
-    echo "SDL2_ttf not found. Installing..."
+    echo "Installing SDL2_ttf..."
     brew install sdl2_ttf
 fi
 
-# Create build directory
-mkdir -p build
-cd build
+echo "Configuring CMake project..."
+cmake -S "${PROJECT_ROOT}" -B "${BUILD_DIR}" -DCMAKE_BUILD_TYPE=Release
 
-# Configure with CMake
-echo "Configuring with CMake..."
-cmake .. -DCMAKE_BUILD_TYPE=Release
+echo "Preparing bundle resources..."
+cp "${PROJECT_ROOT}/Info.plist" "${BUILD_DIR}/Info.plist"
+mkdir -p "${BUILD_DIR}/OSXView.app/Contents/Resources"
+( cd "${BUILD_DIR}" && python3 "${PROJECT_ROOT}/create_icon_simple.py" )
 
-# Build
-echo "Building..."
-make -j$(sysctl -n hw.ncpu)
+echo "Building and creating OSXView.app..."
+cmake --build "${BUILD_DIR}" --config Release
 
-echo "Build complete! Run with: ./build/OSXview"
+echo "Bundle ready at: ${BUILD_DIR}/OSXView.app"
