@@ -33,8 +33,31 @@ int main() {
     std::cout << "OSXview started - Press Ctrl+C to exit" << std::endl;
     
     // Main loop
-    auto lastUpdate = std::chrono::steady_clock::now();
     const std::chrono::milliseconds updateInterval(333); // Update every 1/3 second
+    auto lastUpdate = std::chrono::steady_clock::now() - updateInterval;
+    bool needsRender = true;
+    
+    auto handleEvent = [&](const SDL_Event& event) {
+        if (event.type == SDL_QUIT) {
+            running = 0;
+            return;
+        }
+        
+        if (event.type == SDL_WINDOWEVENT) {
+            switch (event.window.event) {
+                case SDL_WINDOWEVENT_RESIZED:
+                case SDL_WINDOWEVENT_SIZE_CHANGED:
+                    display.handleResize(event.window.data1, event.window.data2);
+                    needsRender = true;
+                    break;
+                case SDL_WINDOWEVENT_EXPOSED:
+                    needsRender = true;
+                    break;
+                default:
+                    break;
+            }
+        }
+    };
     
     while (running) {
         auto now = std::chrono::steady_clock::now();
@@ -43,32 +66,32 @@ int main() {
         if (now - lastUpdate >= updateInterval) {
             metrics.update();
             lastUpdate = now;
+            needsRender = true;
         }
         
-        // Handle SDL events
+        if (needsRender) {
+            display.beginFrame();
+            display.draw(metrics);
+            display.endFrame();
+            needsRender = false;
+        }
+        
+        auto nextUpdateTime = lastUpdate + updateInterval;
+        auto timeToNextUpdate = nextUpdateTime - std::chrono::steady_clock::now();
+        int waitMs = 0;
+        if (timeToNextUpdate > std::chrono::milliseconds::zero()) {
+            waitMs = static_cast<int>(std::chrono::duration_cast<std::chrono::milliseconds>(timeToNextUpdate).count());
+        }
+        
         SDL_Event event;
-        while (SDL_PollEvent(&event)) {
-            if (event.type == SDL_QUIT) {
-                running = 0;
-                break;
-            } else if (event.type == SDL_WINDOWEVENT) {
-                if (event.window.event == SDL_WINDOWEVENT_RESIZED) {
-                    display.handleResize(event.window.data1, event.window.data2);
-                }
+        if (SDL_WaitEventTimeout(&event, waitMs)) {
+            handleEvent(event);
+            
+            // Flush any additional queued events without spinning
+            while (SDL_PollEvent(&event)) {
+                handleEvent(event);
             }
         }
-        
-        // Begin frame
-        display.beginFrame();
-        
-        // Draw all components
-        display.draw(metrics);
-        
-        // End frame
-        display.endFrame();
-        
-        // Small delay to prevent CPU spinning
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
     
     std::cout << "\nShutting down OSXview..." << std::endl;
