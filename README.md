@@ -11,7 +11,7 @@ A C++ clone of the classic OSXview system monitor for macOS, built with SDL2.
 
 ## Demo
 
-https://github.com/user-attachments/assets/OSXview.mov
+![OSXview Demo](OSXview.mov)
 
 ## Dependencies
 
