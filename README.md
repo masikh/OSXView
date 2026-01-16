@@ -11,9 +11,7 @@ A C++ clone of the classic Xosview system monitor for macOS, built with SDL2.
 
 ## Demo
 
-<video width="100%" controls>
-  <source src="https://raw.githubusercontent.com/masikh/OSXView/main/OSXview.mp4" type="video/mp4">
-</video>
+[![Watch the demo](https://raw.githubusercontent.com/masikh/OSXView/main/OSXview.png)](https://raw.githubusercontent.com/masikh/OSXView/main/OSXview.mp4)
 
 ## Dependencies
 
