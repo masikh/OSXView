@@ -93,12 +93,31 @@ private:
     
     void drawText(int x, int y, const std::string& text, const SDL_Color& color);
     void drawRightAlignedText(int x, int y, const std::string& text, const SDL_Color& color);
+    void drawDynamicText(const std::string& key, int x, int y,
+                         const std::string& text, const SDL_Color& color);
+    void drawRightAlignedDynamicText(const std::string& key, int x, int y,
+                                     const std::string& text, const SDL_Color& color);
     void drawMeterBorder(int x, int y, int width, int height);
     void drawLegend(int x, int y, const std::vector<std::string>& labels, 
                    const std::vector<SDL_Color>& colors);
     
     std::string formatBytes(uint64_t bytes) const;
     std::string formatValue(double value, const std::string& unit) const;
+
+    struct DynamicTextEntry {
+        SDL_Texture* texture = nullptr;
+        int width = 0;
+        int height = 0;
+        std::string lastText;
+        SDL_Color color{0, 0, 0, 0};
+    };
+    
+    std::unordered_map<std::string, DynamicTextEntry> dynamicTextCache_;
+    
+    DynamicTextEntry* prepareDynamicText(const std::string& key,
+                                         const std::string& text,
+                                         const SDL_Color& color);
+    void clearDynamicTextCache();
 };
 
 #endif //OSXVIEW_DISPLAY_H

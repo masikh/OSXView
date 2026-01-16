@@ -183,6 +183,7 @@ bool Display::initialize() {
 
 void Display::cleanup() {
     clearTextCache();
+    clearDynamicTextCache();
     
     if (font_) {
         TTF_CloseFont(font_);
@@ -245,6 +246,7 @@ void Display::updateLayout() {
     if (font_) {
         if (TTF_SetFontSize(font_, fontSize) == 0) {
             setActiveFontSize(fontSize);
+            clearDynamicTextCache();
         }
     }
     charWidth_ = fontSize * 0.6;   // Approximate character width
@@ -286,7 +288,11 @@ void Display::drawCPUMeter(const std::vector<CPUMetrics>& metrics, int y) {
     }
     
     // drawRightAlignedText(labelWidth_ + valueWidth_, y + meterHeight_/2 - charHeight_/2, formatValue(user + system, "%"), valueColor_);
-    drawRightAlignedText(labelWidth_, y + meterHeight_/2 - charHeight_/2, formatValue(user + system, "%"), valueColor_);
+    drawRightAlignedDynamicText("cpu_total",
+                                labelWidth_,
+                                y + meterHeight_/2 - charHeight_/2,
+                                formatValue(user + system, "%"),
+                                valueColor_);
 
     // Draw legend above the bar
     std::vector<std::string> labels = {"USR", "SYS", "IDLE"};
@@ -304,7 +310,11 @@ void Display::drawMemoryMeter(const MemoryMetrics& metrics, int y) {
     drawText(4, y + meterHeight_/2 - charHeight_/2, "MEM", labelColor_);
     
     double usedGB = metrics.used / (1024.0 * 1024.0 * 1024.0);
-    drawRightAlignedText(labelWidth_, y + meterHeight_/2 - charHeight_/2, formatValue(usedGB, "G"), valueColor_);
+    drawRightAlignedDynamicText("mem_used",
+                                labelWidth_,
+                                y + meterHeight_/2 - charHeight_/2,
+                                formatValue(usedGB, "G"),
+                                valueColor_);
     
     // Draw legend above the bar
     std::vector<std::string> labels = {"USED", "BUFF", "SLAB", "FREE"};
@@ -328,7 +338,11 @@ void Display::drawDiskMeter(const DiskMetrics& metrics, int y) {
     drawText(4, y + meterHeight_/2 - charHeight_/2, "DISK", labelColor_);
     
     std::string valStr = formatBytes(metrics.readBytes + metrics.writeBytes) + "/s";
-    drawRightAlignedText(labelWidth_, y + meterHeight_/2 - charHeight_/2, valStr, valueColor_);
+    drawRightAlignedDynamicText("disk_total",
+                                labelWidth_,
+                                y + meterHeight_/2 - charHeight_/2,
+                                valStr,
+                                valueColor_);
     
     // Draw legend above the bar
     std::vector<std::string> labels = {"READ", "WRITE", "IDLE"};
@@ -368,7 +382,11 @@ void Display::drawNetworkMeter(const NetworkMetrics& metrics, int y) {
     drawText(4, y + meterHeight_/2 - charHeight_/2, "NET", labelColor_);
     
     std::string valStr = formatBytes(metrics.bytesIn + metrics.bytesOut);
-    drawRightAlignedText(labelWidth_, y + meterHeight_/2 - charHeight_/2, valStr, valueColor_);
+    drawRightAlignedDynamicText("net_total",
+                                labelWidth_,
+                                y + meterHeight_/2 - charHeight_/2,
+                                valStr,
+                                valueColor_);
     
     // Draw legend above the bar
     std::vector<std::string> labels = {"IN", "OUT", "IDLE"};
@@ -406,7 +424,11 @@ void Display::drawNetworkMeter(const NetworkMetrics& metrics, int y) {
 void Display::drawIRQMeter(int irqCount, int y) {
     // Draw label and value
     drawText(4, y + meterHeight_/2 - charHeight_/2, "IRQS", labelColor_);
-    drawRightAlignedText(labelWidth_, y + meterHeight_/2 - charHeight_/2, std::to_string(irqCount), valueColor_);
+    drawRightAlignedDynamicText("irq_count",
+                                labelWidth_,
+                                y + meterHeight_/2 - charHeight_/2,
+                                std::to_string(irqCount),
+                                valueColor_);
     
     // Draw legend above the bar
     std::vector<std::string> labels = {"IRQs per sec", "IDLE"};
@@ -463,6 +485,80 @@ void Display::drawLegend(int x, int y, const std::vector<std::string>& labels,
             currentX += (int)labels[i].length() * charWidth_ + charWidth_ * 2;
         }
     }
+}
+
+Display::DynamicTextEntry* Display::prepareDynamicText(const std::string& key,
+                                                       const std::string& text,
+                                                       const SDL_Color& color) {
+    if (!renderer_ || !font_) {
+        return nullptr;
+    }
+    
+    auto& entry = dynamicTextCache_[key];
+    bool needsUpdate = (entry.texture == nullptr) ||
+                       (entry.lastText != text) ||
+                       (entry.color.r != color.r ||
+                        entry.color.g != color.g ||
+                        entry.color.b != color.b ||
+                        entry.color.a != color.a);
+    
+    if (needsUpdate) {
+        if (entry.texture) {
+            SDL_DestroyTexture(entry.texture);
+            entry.texture = nullptr;
+        }
+        
+        SDL_Surface* surface = TTF_RenderText_Solid(font_, text.c_str(), color);
+        if (!surface) {
+            return nullptr;
+        }
+        
+        SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer_, surface);
+        if (!texture) {
+            SDL_FreeSurface(surface);
+            return nullptr;
+        }
+        
+        entry.texture = texture;
+        entry.width = surface->w;
+        entry.height = surface->h;
+        entry.lastText = text;
+        entry.color = color;
+        SDL_FreeSurface(surface);
+    }
+    
+    return &entry;
+}
+
+void Display::drawDynamicText(const std::string& key, int x, int y,
+                              const std::string& text, const SDL_Color& color) {
+    DynamicTextEntry* entry = prepareDynamicText(key, text, color);
+    if (!entry || !entry->texture) {
+        return;
+    }
+    
+    SDL_Rect dstRect{x, y, entry->width, entry->height};
+    SDL_RenderCopy(renderer_, entry->texture, nullptr, &dstRect);
+}
+
+void Display::drawRightAlignedDynamicText(const std::string& key, int x, int y,
+                                          const std::string& text, const SDL_Color& color) {
+    DynamicTextEntry* entry = prepareDynamicText(key, text, color);
+    if (!entry || !entry->texture) {
+        return;
+    }
+    
+    SDL_Rect dstRect{x - entry->width, y, entry->width, entry->height};
+    SDL_RenderCopy(renderer_, entry->texture, nullptr, &dstRect);
+}
+
+void Display::clearDynamicTextCache() {
+    for (auto& kv : dynamicTextCache_) {
+        if (kv.second.texture) {
+            SDL_DestroyTexture(kv.second.texture);
+        }
+    }
+    dynamicTextCache_.clear();
 }
 
 void Display::drawText(int x, int y, const std::string& text, const SDL_Color& color) {

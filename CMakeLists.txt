@@ -4,6 +4,8 @@ project(OSXview)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+option(OSXVIEW_PROFILE "Enable lightweight profiling logs" OFF)
+
 set(APP_BUNDLE_DIR "${CMAKE_BINARY_DIR}/OSXView.app")
 set(APP_CONTENTS_DIR "${APP_BUNDLE_DIR}/Contents")
 set(APP_MACOS_DIR "${APP_CONTENTS_DIR}/MacOS")
@@ -29,6 +31,11 @@ add_executable(OSXview MACOSX_BUNDLE
     SystemMetrics.cpp
     Display.cpp
 )
+
+if(OSXVIEW_PROFILE)
+    target_compile_definitions(OSXview PRIVATE OSXVIEW_PROFILE)
+    message(STATUS "OSXVIEW_PROFILE enabled")
+endif()
 
 # Set bundle properties
 set_target_properties(OSXview PROPERTIES

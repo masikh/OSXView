@@ -3,6 +3,7 @@ set -euo pipefail
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BUILD_DIR="${PROJECT_ROOT}/build"
+PROFILE_OPTION="${OSXVIEW_PROFILE:-OFF}"
 
 echo "=== OSXview bundler ==="
 
@@ -21,8 +22,10 @@ if ! brew list sdl2_ttf &> /dev/null; then
     brew install sdl2_ttf
 fi
 
-echo "Configuring CMake project..."
-cmake -S "${PROJECT_ROOT}" -B "${BUILD_DIR}" -DCMAKE_BUILD_TYPE=Release
+echo "Configuring CMake project (OSXVIEW_PROFILE=${PROFILE_OPTION})..."
+cmake -S "${PROJECT_ROOT}" -B "${BUILD_DIR}" \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DOSXVIEW_PROFILE="${PROFILE_OPTION}"
 
 echo "Preparing bundle resources..."
 cp "${PROJECT_ROOT}/Info.plist" "${BUILD_DIR}/Info.plist"
