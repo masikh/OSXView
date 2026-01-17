@@ -240,7 +240,7 @@ void Display::updateLayout() {
     labelWidth_ = width_ / 8 + METER_SPACING;      // 12.5% of window width
     valueWidth_ = width_ / 8;      // 12.5% of window width
     meterX_ = labelWidth_ + valueWidth_ + METER_SPACING;
-    meterWidth_ = width_ - labelWidth_ - 24;  // Use remaining space for meters
+    meterWidth_ = width_ - labelWidth_ - 40;  // Use remaining space for meters
     legendX_ = meterX_ + meterWidth_ + METER_SPACING;
     
     printf("Meter width: %d (from x=%d to x=%d)\n", meterWidth_, meterX_, meterX_ + meterWidth_);
