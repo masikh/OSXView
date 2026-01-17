@@ -4,6 +4,7 @@
 #include <sstream>
 #include <cmath>
 #include <unordered_map>
+#include <chrono>
 
 namespace {
 
@@ -86,7 +87,7 @@ Display::Display(int width, int height)
       valueColor_{89, 135, 96, 255},
       labelColor_{203, 203, 69, 255},
       borderColor_{255, 255, 0, 255},  // Bright yellow borders
-      cpuUserColor_{255, 0, 0, 255},    // Red for user
+      cpuUserColor_{74, 137, 92, 255},    // Match MEM used green for user
       cpuSystemColor_{255, 165, 0, 255}, // Orange for system
       cpuIdleColor_{0, 0, 0, 255},      // Black for idle
       memUsedColor_{74, 137, 92, 255},    // Custom green for used
@@ -289,7 +290,7 @@ void Display::drawCPUMeter(const std::vector<CPUMetrics>& metrics, int y) {
     
     // drawRightAlignedText(labelWidth_ + valueWidth_, y + meterHeight_/2 - charHeight_/2, formatValue(user + system, "%"), valueColor_);
     drawRightAlignedDynamicText("cpu_total",
-                                labelWidth_,
+                                labelWidth_ + 12,
                                 y + meterHeight_/2 - charHeight_/2,
                                 formatValue(user + system, "%"),
                                 valueColor_);
@@ -297,12 +298,14 @@ void Display::drawCPUMeter(const std::vector<CPUMetrics>& metrics, int y) {
     // Draw legend above the bar
     std::vector<std::string> labels = {"USR", "SYS", "IDLE"};
     std::vector<SDL_Color> colors = {cpuUserColor_, cpuSystemColor_, cpuIdleColor_};
-    drawLegend(labelWidth_ + 16, y - charHeight_ - 5, labels, colors);
+    drawLegend(labelWidth_ + LABEL_TO_METER_SPACING, y - charHeight_ - 5, labels, colors);
     
     // Draw horizontal meter
     std::vector<double> values = {user, system, idle};
+    updateHistory(cpuHistory_, values);
+    std::vector<double> avgValues = computeHistoryAverage(cpuHistory_, values.size());
     std::vector<SDL_Color> meterColors = {cpuUserColor_, cpuSystemColor_, cpuIdleColor_};
-    drawHorizontalMeter(labelWidth_ + 16, y, meterWidth_, meterHeight_, values, meterColors);
+    drawHorizontalMeter(labelWidth_ + LABEL_TO_METER_SPACING, y, meterWidth_, meterHeight_, values, meterColors, &avgValues);
 }
 
 void Display::drawMemoryMeter(const MemoryMetrics& metrics, int y) {
@@ -311,7 +314,7 @@ void Display::drawMemoryMeter(const MemoryMetrics& metrics, int y) {
     
     double usedGB = metrics.used / (1024.0 * 1024.0 * 1024.0);
     drawRightAlignedDynamicText("mem_used",
-                                labelWidth_,
+                                labelWidth_ + 12,
                                 y + meterHeight_/2 - charHeight_/2,
                                 formatValue(usedGB, "G"),
                                 valueColor_);
@@ -319,7 +322,7 @@ void Display::drawMemoryMeter(const MemoryMetrics& metrics, int y) {
     // Draw legend above the bar
     std::vector<std::string> labels = {"USED", "BUFF", "SLAB", "FREE"};
     std::vector<SDL_Color> colors = {valueColor_, {173, 216, 230, 255}, {0, 0, 139, 255}, memFreeColor_};
-    drawLegend(labelWidth_ + 16, y - charHeight_ - 5, labels, colors);
+    drawLegend(labelWidth_ + LABEL_TO_METER_SPACING, y - charHeight_ - 5, labels, colors);
     
     // Calculate memory components
     double used = (double)metrics.used / metrics.total * 100.0;
@@ -329,8 +332,10 @@ void Display::drawMemoryMeter(const MemoryMetrics& metrics, int y) {
     
     // Draw horizontal meter
     std::vector<double> values = {used, buffer, slab, free};
+    updateHistory(memHistory_, values);
+    std::vector<double> avgValues = computeHistoryAverage(memHistory_, values.size());
     std::vector<SDL_Color> meterColors = {memUsedColor_, memBufferColor_, memSlabColor_, memFreeColor_};
-    drawHorizontalMeter(labelWidth_ + 16, y, meterWidth_, meterHeight_, values, meterColors);
+    drawHorizontalMeter(labelWidth_ + LABEL_TO_METER_SPACING, y, meterWidth_, meterHeight_, values, meterColors, &avgValues);
 }
 
 void Display::drawDiskMeter(const DiskMetrics& metrics, int y) {
@@ -339,15 +344,15 @@ void Display::drawDiskMeter(const DiskMetrics& metrics, int y) {
     
     std::string valStr = formatBytes(metrics.readBytes + metrics.writeBytes) + "/s";
     drawRightAlignedDynamicText("disk_total",
-                                labelWidth_,
+                                labelWidth_ + 12,
                                 y + meterHeight_/2 - charHeight_/2,
                                 valStr,
                                 valueColor_);
     
     // Draw legend above the bar
     std::vector<std::string> labels = {"READ", "WRITE", "IDLE"};
-    std::vector<SDL_Color> colors = {textColor_, diskWriteColor_, cpuIdleColor_};
-    drawLegend(labelWidth_ + 16, y - charHeight_ - 5, labels, colors);
+    std::vector<SDL_Color> colors = {netInColor_, diskWriteColor_, cpuIdleColor_};
+    drawLegend(labelWidth_ + LABEL_TO_METER_SPACING, y - charHeight_ - 5, labels, colors);
     
     // Calculate disk usage using a logarithmic scale to avoid instant saturation
     double maxBytes = 500.0 * 1024.0 * 1024.0; // 500MB/s as ~100%
@@ -373,8 +378,10 @@ void Display::drawDiskMeter(const DiskMetrics& metrics, int y) {
     
     // Draw horizontal meter
     std::vector<double> values = {read, write, idle};
+    updateHistory(diskHistory_, values);
+    std::vector<double> avgValues = computeHistoryAverage(diskHistory_, values.size());
     std::vector<SDL_Color> meterColors = {diskReadColor_, diskWriteColor_, diskIdleColor_};
-    drawHorizontalMeter(labelWidth_ + 16, y, meterWidth_, meterHeight_, values, meterColors);
+    drawHorizontalMeter(labelWidth_ + LABEL_TO_METER_SPACING, y, meterWidth_, meterHeight_, values, meterColors, &avgValues);
 }
 
 void Display::drawNetworkMeter(const NetworkMetrics& metrics, int y) {
@@ -383,7 +390,7 @@ void Display::drawNetworkMeter(const NetworkMetrics& metrics, int y) {
     
     std::string valStr = formatBytes(metrics.bytesIn + metrics.bytesOut);
     drawRightAlignedDynamicText("net_total",
-                                labelWidth_,
+                                labelWidth_ + 12,
                                 y + meterHeight_/2 - charHeight_/2,
                                 valStr,
                                 valueColor_);
@@ -391,7 +398,7 @@ void Display::drawNetworkMeter(const NetworkMetrics& metrics, int y) {
     // Draw legend above the bar
     std::vector<std::string> labels = {"IN", "OUT", "IDLE"};
     std::vector<SDL_Color> colors = {netInColor_, netOutColor_, cpuIdleColor_};
-    drawLegend(labelWidth_ + 16, y - charHeight_ - 5, labels, colors);
+    drawLegend(labelWidth_ + LABEL_TO_METER_SPACING, y - charHeight_ - 5, labels, colors);
     
     // Calculate network usage using a logarithmic scale similar to disk
     double maxBytes = 2.0 * 1024.0 * 1024.0 * 1024.0; // 2GB/s ~= 100%
@@ -417,8 +424,10 @@ void Display::drawNetworkMeter(const NetworkMetrics& metrics, int y) {
     
     // Draw horizontal meter
     std::vector<double> values = {in, out, idle};
+    updateHistory(netHistory_, values);
+    std::vector<double> avgValues = computeHistoryAverage(netHistory_, values.size());
     std::vector<SDL_Color> meterColors = {netInColor_, netOutColor_, netIdleColor_};
-    drawHorizontalMeter(labelWidth_ + 16, y, meterWidth_, meterHeight_, values, meterColors);
+    drawHorizontalMeter(labelWidth_ + LABEL_TO_METER_SPACING, y, meterWidth_, meterHeight_, values, meterColors, &avgValues);
 }
 
 void Display::drawIRQMeter(int irqCount, int y) {
@@ -447,26 +456,44 @@ void Display::drawIRQMeter(int irqCount, int y) {
 
 void Display::drawHorizontalMeter(int x, int y, int width, int height,
                                 const std::vector<double>& values,
-                                const std::vector<SDL_Color>& colors) {
+                                const std::vector<SDL_Color>& colors,
+                                const std::vector<double>* secondaryValues) {
     // Draw border
     drawMeterBorder(x, y, width, height);
     
-    // Draw meter segments
-    int currentX = x + 2;
-    double total = 0;
-    for (double v : values) total += v;
-    
-    for (size_t i = 0; i < values.size(); i++) {
-        int segmentWidth = total > 0 ? (int)(values[i] / 100.0 * (width - 4)) : 0;
-        
-        if (segmentWidth > 0) {
-            SDL_Rect segment{currentX, y + 2, segmentWidth, height - 4};
-            SDL_SetRenderDrawColor(renderer_, colors[i].r, colors[i].g, 
-                                 colors[i].b, colors[i].a);
-            SDL_RenderFillRect(renderer_, &segment);
+    auto drawSegments = [&](const std::vector<double>& segments,
+                            int drawY,
+                            int segmentHeight,
+                            bool muted) {
+        if (segmentHeight <= 0) {
+            return;
         }
+        int currentX = x + 2;
+        double total = 0;
+        for (double v : segments) total += v;
         
-        currentX += segmentWidth;
+        for (size_t i = 0; i < segments.size(); i++) {
+            int segmentWidth = total > 0 ? static_cast<int>(segments[i] / 100.0 * (width - 4)) : 0;
+            
+            if (segmentWidth > 0) {
+                const SDL_Color& color = colors[i];
+                SDL_Rect segment{currentX, drawY, segmentWidth, segmentHeight};
+                SDL_SetRenderDrawColor(renderer_, color.r, color.g, color.b, color.a);
+                SDL_RenderFillRect(renderer_, &segment);
+            }
+            
+            currentX += segmentWidth;
+        }
+    };
+    
+    int innerHeight = height - 4;
+    int halfHeight = secondaryValues ? innerHeight / 2 : innerHeight;
+    
+    drawSegments(values, y + 2, halfHeight, false);
+    
+    if (secondaryValues && !secondaryValues->empty()) {
+        int bottomHeight = innerHeight - halfHeight;
+        drawSegments(*secondaryValues, y + 2 + halfHeight, bottomHeight, true);
     }
 }
 
@@ -616,4 +643,45 @@ std::string Display::formatValue(double value, const std::string& unit) const {
     std::ostringstream oss;
     oss << std::fixed << std::setprecision(0) << value << unit;
     return oss.str();
+}
+
+void Display::updateHistory(MeterHistory& history, const std::vector<double>& values) {
+    auto now = std::chrono::steady_clock::now();
+    
+    // Reset history if component counts change
+    if (!history.empty() && history.front().values.size() != values.size()) {
+        history.clear();
+    }
+    
+    history.push_back({now, values});
+    
+    while (!history.empty() && now - history.front().timestamp > HISTORY_WINDOW) {
+        history.pop_front();
+    }
+}
+
+std::vector<double> Display::computeHistoryAverage(const MeterHistory& history, size_t componentCount) const {
+    std::vector<double> averages(componentCount, 0.0);
+    if (history.empty() || componentCount == 0) {
+        return averages;
+    }
+    
+    double sampleCount = 0.0;
+    for (const auto& sample : history) {
+        if (sample.values.size() != componentCount) {
+            continue;
+        }
+        for (size_t i = 0; i < componentCount; ++i) {
+            averages[i] += sample.values[i];
+        }
+        sampleCount += 1.0;
+    }
+    
+    if (sampleCount > 0.0) {
+        for (double& value : averages) {
+            value /= sampleCount;
+        }
+    }
+    
+    return averages;
 }

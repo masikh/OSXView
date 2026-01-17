@@ -6,6 +6,8 @@
 #include <vector>
 #include <string>
 #include <unordered_map>
+#include <deque>
+#include <chrono>
 #include "SystemMetrics.h"
 
 class Display {
@@ -67,6 +69,7 @@ private:
     static const int LABEL_X = 10;
     static const int VALUE_X = 100;
     static const int LEGEND_Y_OFFSET = -15;
+    static const int LABEL_TO_METER_SPACING = 20;
     
     // Calculated layout
     int meterHeight_;
@@ -89,7 +92,8 @@ private:
     
     void drawHorizontalMeter(int x, int y, int width, int height,
                            const std::vector<double>& values,
-                           const std::vector<SDL_Color>& colors);
+                           const std::vector<SDL_Color>& colors,
+                           const std::vector<double>* secondaryValues = nullptr);
     
     void drawText(int x, int y, const std::string& text, const SDL_Color& color);
     void drawRightAlignedText(int x, int y, const std::string& text, const SDL_Color& color);
@@ -118,6 +122,22 @@ private:
                                          const std::string& text,
                                          const SDL_Color& color);
     void clearDynamicTextCache();
+    
+    struct MeterHistorySample {
+        std::chrono::steady_clock::time_point timestamp;
+        std::vector<double> values;
+    };
+    
+    using MeterHistory = std::deque<MeterHistorySample>;
+    static constexpr std::chrono::seconds HISTORY_WINDOW = std::chrono::seconds(15);
+    
+    MeterHistory cpuHistory_;
+    MeterHistory memHistory_;
+    MeterHistory diskHistory_;
+    MeterHistory netHistory_;
+    
+    void updateHistory(MeterHistory& history, const std::vector<double>& values);
+    std::vector<double> computeHistoryAverage(const MeterHistory& history, size_t componentCount) const;
 };
 
 #endif //OSXVIEW_DISPLAY_H
