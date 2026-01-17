@@ -41,6 +41,13 @@ struct DiskMetrics {
     uint64_t writeOps;
 };
 
+struct GPUMetrics {
+    double deviceUtilization = 0.0;
+    double rendererUtilization = 0.0;
+    double tilerUtilization = 0.0;
+    bool valid = false;
+};
+
 struct SystemInfo {
     double loadAverage[3];
     int processCount;
@@ -59,6 +66,7 @@ public:
     std::vector<CPUMetrics> getCPUMetrics() const { return cpuMetrics_; }
     MemoryMetrics getMemoryMetrics() const { return memoryMetrics_; }
     MemoryMetrics getSwapMetrics() const { return swapMetrics_; }
+    GPUMetrics getGPUMetrics() const { return gpuMetrics_; }
     NetworkMetrics getNetworkMetrics() const { return networkMetrics_; }
     DiskMetrics getDiskMetrics() const { return diskMetrics_; }
     SystemInfo getSystemInfo() const { return systemInfo_; }
@@ -68,6 +76,7 @@ private:
     void updateCPU();
     void updateMemory();
     void updateSwap();
+    void updateGPU();
     void updateNetwork();
     void updateDisk();
     void updateSystemInfo();
@@ -75,6 +84,7 @@ private:
     std::vector<CPUMetrics> cpuMetrics_;
     MemoryMetrics memoryMetrics_;
     MemoryMetrics swapMetrics_;
+    GPUMetrics gpuMetrics_;
     NetworkMetrics networkMetrics_;
     DiskMetrics diskMetrics_;
     SystemInfo systemInfo_;
@@ -94,6 +104,7 @@ private:
     std::chrono::steady_clock::time_point lastDiskSample_;
     std::chrono::steady_clock::time_point lastNetworkSample_;
     std::chrono::steady_clock::time_point lastSystemInfoSample_;
+    std::chrono::steady_clock::time_point lastGpuSample_;
     
     io_iterator_t networkIter_;
     io_iterator_t diskIter_;

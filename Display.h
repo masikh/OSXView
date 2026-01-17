@@ -43,6 +43,11 @@ private:
     SDL_Color cpuSystemColor_;
     SDL_Color cpuIdleColor_;
     
+    // GPU colors
+    SDL_Color gpuDeviceColor_;
+    SDL_Color gpuRendererColor_;
+    SDL_Color gpuTilerColor_;
+    
     // Memory colors
     SDL_Color memUsedColor_;
     SDL_Color memBufferColor_;
@@ -64,7 +69,7 @@ private:
     SDL_Color irqIdleColor_;
     
     // Dynamic layout constants
-    static const int NUM_METERS = 4;
+    static const int NUM_METERS = 5;
     static const int METER_SPACING = 40;
     static const int LABEL_X = 10;
     static const int VALUE_X = 100;
@@ -85,6 +90,7 @@ private:
     void updateLayout();
     
     void drawCPUMeter(const std::vector<CPUMetrics>& metrics, int y);
+    void drawGPUMeter(const GPUMetrics& metrics, int y);
     void drawMemoryMeter(const MemoryMetrics& metrics, int y);
     void drawDiskMeter(const DiskMetrics& metrics, int y);
     void drawNetworkMeter(const NetworkMetrics& metrics, int y);
@@ -132,6 +138,7 @@ private:
     static constexpr std::chrono::seconds HISTORY_WINDOW = std::chrono::seconds(15);
     
     MeterHistory cpuHistory_;
+    MeterHistory gpuHistory_;
     MeterHistory memHistory_;
     MeterHistory diskHistory_;
     MeterHistory netHistory_;

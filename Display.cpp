@@ -90,6 +90,9 @@ Display::Display(int width, int height)
       cpuUserColor_{74, 137, 92, 255},    // Match MEM used green for user
       cpuSystemColor_{255, 165, 0, 255}, // Orange for system
       cpuIdleColor_{0, 0, 0, 255},      // Black for idle
+      gpuDeviceColor_{127, 219, 255, 255}, // Cyan for device
+      gpuRendererColor_{255, 92, 146, 255}, // Pink for renderer
+      gpuTilerColor_{255, 215, 0, 255},     // Gold for tiler
       memUsedColor_{74, 137, 92, 255},    // Custom green for used
       memBufferColor_{255, 165, 0, 255}, // Orange for buffers
       memSlabColor_{0, 100, 255, 255},   // Dark blue for slab
@@ -268,6 +271,9 @@ void Display::draw(const SystemMetrics& metrics) {
     drawCPUMeter(metrics.getCPUMetrics(), y);
     y += meterHeight_ + METER_SPACING;
     
+    drawGPUMeter(metrics.getGPUMetrics(), y);
+    y += meterHeight_ + METER_SPACING;
+    
     drawMemoryMeter(metrics.getMemoryMetrics(), y);
     y += meterHeight_ + METER_SPACING;
     
@@ -306,6 +312,36 @@ void Display::drawCPUMeter(const std::vector<CPUMetrics>& metrics, int y) {
     std::vector<double> avgValues = computeHistoryAverage(cpuHistory_, values.size());
     std::vector<SDL_Color> meterColors = {cpuUserColor_, cpuSystemColor_, cpuIdleColor_};
     drawHorizontalMeter(labelWidth_ + LABEL_TO_METER_SPACING, y, meterWidth_, meterHeight_, values, meterColors, &avgValues);
+}
+
+void Display::drawGPUMeter(const GPUMetrics& metrics, int y) {
+    drawText(4, y + meterHeight_/2 - charHeight_/2, "GPU", labelColor_);
+    
+    const bool valid = metrics.valid;
+    double device = valid ? std::clamp(metrics.deviceUtilization, 0.0, 100.0) : 0.0;
+    double renderer = valid ? std::clamp(metrics.rendererUtilization, 0.0, 100.0) : 0.0;
+    double tiler = valid ? std::clamp(metrics.tilerUtilization, 0.0, 100.0) : 0.0;
+    
+    drawRightAlignedDynamicText("gpu_total",
+                                labelWidth_ + 12,
+                                y + meterHeight_/2 - charHeight_/2,
+                                valid ? formatValue(device, "%") : "N/A",
+                                valueColor_);
+    
+    std::vector<std::string> labels = {"DEV", "REND", "TILER"};
+    std::vector<SDL_Color> colors = {gpuDeviceColor_, gpuRendererColor_, gpuTilerColor_};
+    drawLegend(labelWidth_ + LABEL_TO_METER_SPACING, y - charHeight_ - 5, labels, colors);
+    
+    std::vector<double> values = {device, renderer, tiler};
+    updateHistory(gpuHistory_, values);
+    std::vector<double> avgValues = computeHistoryAverage(gpuHistory_, values.size());
+    drawHorizontalMeter(labelWidth_ + LABEL_TO_METER_SPACING,
+                        y,
+                        meterWidth_,
+                        meterHeight_,
+                        values,
+                        colors,
+                        valid ? &avgValues : nullptr);
 }
 
 void Display::drawMemoryMeter(const MemoryMetrics& metrics, int y) {

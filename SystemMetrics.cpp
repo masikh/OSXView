@@ -20,6 +20,7 @@ namespace {
 const auto kNetworkUpdateInterval = std::chrono::milliseconds(333);
 const auto kDiskUpdateInterval = std::chrono::milliseconds(1500);
 const auto kSystemInfoUpdateInterval = std::chrono::milliseconds(333);
+const auto kGPUUpdateInterval = std::chrono::milliseconds(500);
 
 template <typename T, size_t N>
 constexpr size_t arraySize(const T (&)[N]) {
@@ -58,6 +59,38 @@ bool tryGetDictionaryValue(CFDictionaryRef dict, const CFStringRef* keys, size_t
     return false;
 }
 
+bool tryGetDictionaryDouble(CFDictionaryRef dict, CFStringRef key, double& outValue) {
+    if (!dict || !key) {
+        return false;
+    }
+
+    CFNumberRef number = (CFNumberRef)CFDictionaryGetValue(dict, key);
+    if (!number) {
+        return false;
+    }
+
+    double value = 0.0;
+    if (!CFNumberGetValue(number, kCFNumberDoubleType, &value)) {
+        int64_t intValue = 0;
+        if (!CFNumberGetValue(number, kCFNumberSInt64Type, &intValue)) {
+            return false;
+        }
+        value = static_cast<double>(intValue);
+    }
+
+    outValue = value;
+    return true;
+}
+
+bool tryGetDictionaryDouble(CFDictionaryRef dict, const CFStringRef* keys, size_t keyCount, double& outValue) {
+    for (size_t i = 0; i < keyCount; ++i) {
+        if (tryGetDictionaryDouble(dict, keys[i], outValue)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 } // namespace
 
 SystemMetrics::SystemMetrics() 
@@ -69,6 +102,7 @@ SystemMetrics::SystemMetrics()
       lastDiskSample_(),
       lastNetworkSample_(),
       lastSystemInfoSample_(),
+      lastGpuSample_(),
       networkIter_(0), diskIter_(0) {
 }
 
@@ -106,6 +140,7 @@ void SystemMetrics::update() {
     updateCPU();
     updateMemory();
     updateSwap();
+    updateGPU();
     updateNetwork();
     updateDisk();
     updateSystemInfo();
@@ -205,6 +240,92 @@ void SystemMetrics::updateSwap() {
     swapMetrics_.active = swapUsage.xsu_used;
     swapMetrics_.inactive = 0;
     swapMetrics_.wired = 0;
+}
+
+void SystemMetrics::updateGPU() {
+    auto now = std::chrono::steady_clock::now();
+    if (lastGpuSample_.time_since_epoch().count() != 0 &&
+        now - lastGpuSample_ < kGPUUpdateInterval) {
+        return;
+    }
+    lastGpuSample_ = now;
+
+    gpuMetrics_ = GPUMetrics{};
+
+    auto fetchStatsForClass = [&](const char* className) -> bool {
+        if (!className) {
+            return false;
+        }
+        CFMutableDictionaryRef matching = IOServiceMatching(className);
+        if (!matching) {
+            return false;
+        }
+
+        io_iterator_t iterator = IO_OBJECT_NULL;
+        kern_return_t kr = IOServiceGetMatchingServices(kIOMainPortDefault, matching, &iterator);
+        if (kr != KERN_SUCCESS) {
+            return false;
+        }
+
+        io_object_t object = IO_OBJECT_NULL;
+        bool found = false;
+        while ((object = IOIteratorNext(iterator)) != IO_OBJECT_NULL) {
+            CFDictionaryRef perfStats = (CFDictionaryRef)IORegistryEntryCreateCFProperty(
+                object, CFSTR("PerformanceStatistics"), kCFAllocatorDefault, 0);
+            if (perfStats) {
+                const CFStringRef deviceKeys[] = {
+                    CFSTR("Device Utilization %"),
+                    CFSTR("device_utilization"),
+                    CFSTR("Device Utilization")
+                };
+                const CFStringRef rendererKeys[] = {
+                    CFSTR("Renderer Utilization %"),
+                    CFSTR("renderer_utilization"),
+                    CFSTR("Renderer Utilization")
+                };
+                const CFStringRef tilerKeys[] = {
+                    CFSTR("Tiler Utilization %"),
+                    CFSTR("tiler_utilization"),
+                    CFSTR("Tiler Utilization")
+                };
+
+                double value = 0.0;
+                bool anyValue = false;
+                if (tryGetDictionaryDouble(perfStats, deviceKeys, arraySize(deviceKeys), value)) {
+                    gpuMetrics_.deviceUtilization = value;
+                    anyValue = true;
+                }
+                if (tryGetDictionaryDouble(perfStats, rendererKeys, arraySize(rendererKeys), value)) {
+                    gpuMetrics_.rendererUtilization = value;
+                    anyValue = true;
+                }
+                if (tryGetDictionaryDouble(perfStats, tilerKeys, arraySize(tilerKeys), value)) {
+                    gpuMetrics_.tilerUtilization = value;
+                    anyValue = true;
+                }
+
+                if (anyValue) {
+                    gpuMetrics_.valid = true;
+                    found = true;
+                }
+                CFRelease(perfStats);
+            }
+
+            IOObjectRelease(object);
+
+            if (found) {
+                break;
+            }
+        }
+
+        IOObjectRelease(iterator);
+        return found;
+    };
+
+    if (!fetchStatsForClass("IOAccelerator") &&
+        !fetchStatsForClass("AGXAccelerator")) {
+        gpuMetrics_.valid = false;
+    }
 }
 
 void SystemMetrics::updateNetwork() {
