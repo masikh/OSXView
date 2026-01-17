@@ -285,7 +285,7 @@ void Display::draw(const SystemMetrics& metrics) {
 
 void Display::drawCPUMeter(const std::vector<CPUMetrics>& metrics, int y) {
     // Draw label and value at calculated positions
-    drawText(4, y + meterHeight_/2 - charHeight_/2, "CPU", labelColor_);
+    drawText(LABEL_PADDING_X, y + meterHeight_/2 - charHeight_/2, "CPU", labelColor_);
     
     double user = 0, system = 0, idle = 100;
     if (!metrics.empty()) {
@@ -315,7 +315,7 @@ void Display::drawCPUMeter(const std::vector<CPUMetrics>& metrics, int y) {
 }
 
 void Display::drawGPUMeter(const GPUMetrics& metrics, int y) {
-    drawText(4, y + meterHeight_/2 - charHeight_/2, "GPU", labelColor_);
+    drawText(LABEL_PADDING_X, y + meterHeight_/2 - charHeight_/2, "GPU", labelColor_);
     
     const bool valid = metrics.valid;
     double device = valid ? std::clamp(metrics.deviceUtilization, 0.0, 100.0) : 0.0;
@@ -346,7 +346,7 @@ void Display::drawGPUMeter(const GPUMetrics& metrics, int y) {
 
 void Display::drawMemoryMeter(const MemoryMetrics& metrics, int y) {
     // Draw label and value
-    drawText(4, y + meterHeight_/2 - charHeight_/2, "MEM", labelColor_);
+    drawText(LABEL_PADDING_X, y + meterHeight_/2 - charHeight_/2, "MEM", labelColor_);
     
     double usedGB = metrics.used / (1024.0 * 1024.0 * 1024.0);
     drawRightAlignedDynamicText("mem_used",
@@ -376,7 +376,7 @@ void Display::drawMemoryMeter(const MemoryMetrics& metrics, int y) {
 
 void Display::drawDiskMeter(const DiskMetrics& metrics, int y) {
     // Draw label and value
-    drawText(4, y + meterHeight_/2 - charHeight_/2, "DISK", labelColor_);
+    drawText(LABEL_PADDING_X, y + meterHeight_/2 - charHeight_/2, "DISK", labelColor_);
     
     std::string valStr = formatBytes(metrics.readBytes + metrics.writeBytes) + "/s";
     drawRightAlignedDynamicText("disk_total",
@@ -422,7 +422,7 @@ void Display::drawDiskMeter(const DiskMetrics& metrics, int y) {
 
 void Display::drawNetworkMeter(const NetworkMetrics& metrics, int y) {
     // Draw label and value
-    drawText(4, y + meterHeight_/2 - charHeight_/2, "NET", labelColor_);
+    drawText(LABEL_PADDING_X, y + meterHeight_/2 - charHeight_/2, "NET", labelColor_);
     
     std::string valStr = formatBytes(metrics.bytesIn + metrics.bytesOut);
     drawRightAlignedDynamicText("net_total",
@@ -468,7 +468,7 @@ void Display::drawNetworkMeter(const NetworkMetrics& metrics, int y) {
 
 void Display::drawIRQMeter(int irqCount, int y) {
     // Draw label and value
-    drawText(4, y + meterHeight_/2 - charHeight_/2, "IRQS", labelColor_);
+    drawText(LABEL_PADDING_X, y + meterHeight_/2 - charHeight_/2, "IRQS", labelColor_);
     drawRightAlignedDynamicText("irq_count",
                                 labelWidth_,
                                 y + meterHeight_/2 - charHeight_/2,

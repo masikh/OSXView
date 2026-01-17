@@ -71,6 +71,7 @@ private:
     // Dynamic layout constants
     static const int NUM_METERS = 5;
     static const int METER_SPACING = 40;
+    static const int LABEL_PADDING_X = 16;
     static const int LABEL_X = 10;
     static const int VALUE_X = 100;
     static const int LEGEND_Y_OFFSET = -15;
