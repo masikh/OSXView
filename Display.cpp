@@ -83,7 +83,6 @@ CachedTextEntry* ensureCachedText(SDL_Renderer* renderer,
 Display::Display(int width, int height) 
     : window_(nullptr), renderer_(nullptr), font_(nullptr), width_(width), height_(height),
       backgroundColor_{64, 64, 94, 255},  // RGB(64, 64, 64)
-      textColor_{255, 255, 255, 255},
       valueColor_{89, 135, 96, 255},
       labelColor_{203, 203, 69, 255},
       borderColor_{255, 255, 0, 255},  // Bright yellow borders
@@ -104,6 +103,9 @@ Display::Display(int width, int height)
       netInColor_{159, 215, 244, 255},        // Red for in
       netOutColor_{127, 112, 247, 255},   // White for out label
       netIdleColor_{0, 0, 0, 255},        // Black for idle
+      batteryChargeColor_{74, 137, 92, 255},
+      batteryReserveColor_{203, 203, 69, 255},
+      batteryACColor_{127, 219, 255, 255},
       irqColor_{255, 0, 0, 255},          // Red for IRQs
       irqIdleColor_{0, 0, 0, 255} {       // Black for idle
     updateLayout();
@@ -282,6 +284,9 @@ void Display::draw(const SystemMetrics& metrics) {
     y += meterHeight_ + METER_SPACING;
     
     drawNetworkMeter(metrics.getNetworkMetrics(), y);
+    y += meterHeight_ + METER_SPACING;
+    
+    drawBatteryMeter(metrics.getBatteryMetrics(), y);
 }
 
 void Display::drawCPUMeter(const std::vector<CPUMetrics>& metrics, int y) {
@@ -313,6 +318,59 @@ void Display::drawCPUMeter(const std::vector<CPUMetrics>& metrics, int y) {
     std::vector<double> avgValues = computeHistoryAverage(cpuHistory_, values.size());
     std::vector<SDL_Color> meterColors = {cpuUserColor_, cpuSystemColor_, cpuIdleColor_};
     drawHorizontalMeter(labelWidth_ + LABEL_TO_METER_SPACING, y, meterWidth_, meterHeight_, values, meterColors, &avgValues);
+}
+
+void Display::drawBatteryMeter(const BatteryMetrics& metrics, int y) {
+    std::ostringstream LABEL;
+    if (!metrics.isPresent) {
+        LABEL << "N/A";
+    } else {
+        if (metrics.onACPower) {
+            LABEL << "AC";
+        } else if (metrics.isCharging) {
+            LABEL << "CHG";
+        } else {
+            LABEL << "BAT";
+        }
+    }
+
+    drawText(LABEL_PADDING_X, y + meterHeight_/2 - charHeight_/2, LABEL.str(), labelColor_);
+
+    std::string valStr;
+    if (!metrics.isPresent) {
+        valStr = "N/A";
+    } else {
+        std::ostringstream oss;
+        oss << std::fixed << std::setprecision(0) << metrics.chargePercent << "%";
+        valStr = oss.str();
+    }
+
+    drawRightAlignedDynamicText("battery_level",
+                                labelWidth_ + 12,
+                                y + meterHeight_/2 - charHeight_/2,
+                                valStr,
+                                valueColor_);
+
+    std::vector<std::string> labels = {"CHG", "RES"};
+    std::vector<SDL_Color> colors = {
+        metrics.onACPower ? batteryACColor_ : batteryChargeColor_,
+        batteryReserveColor_
+    };
+    drawLegend(labelWidth_ + LABEL_TO_METER_SPACING, y - charHeight_ - 5, labels, colors);
+
+    double charge = metrics.isPresent ? std::clamp(metrics.chargePercent, 0.0, 100.0) : 0.0;
+    double reserve = std::max(0.0, 100.0 - charge);
+
+    std::vector<double> values = {charge, reserve};
+    updateHistory(batteryHistory_, values);
+    std::vector<double> avgValues = computeHistoryAverage(batteryHistory_, values.size());
+    drawHorizontalMeter(labelWidth_ + LABEL_TO_METER_SPACING,
+                        y,
+                        meterWidth_,
+                        meterHeight_,
+                        values,
+                        colors,
+                        metrics.isPresent ? &avgValues : nullptr);
 }
 
 void Display::drawGPUMeter(const GPUMetrics& metrics, int y) {
@@ -517,8 +575,7 @@ void Display::drawHorizontalMeter(int x, int y, int width, int height,
     
     auto drawSegments = [&](const std::vector<double>& segments,
                             int drawY,
-                            int segmentHeight,
-                            bool muted) {
+                            int segmentHeight) {
         if (segmentHeight <= 0) {
             return;
         }
@@ -550,11 +607,11 @@ void Display::drawHorizontalMeter(int x, int y, int width, int height,
     int innerHeight = height - 4;
     int halfHeight = secondaryValues ? innerHeight / 2 : innerHeight;
     
-    drawSegments(values, y + 2, halfHeight, false);
+    drawSegments(values, y + 2, halfHeight);
     
     if (secondaryValues && !secondaryValues->empty()) {
         int bottomHeight = innerHeight - halfHeight;
-        drawSegments(*secondaryValues, y + 2 + halfHeight, bottomHeight, true);
+        drawSegments(*secondaryValues, y + 2 + halfHeight, bottomHeight);
     }
 }
 

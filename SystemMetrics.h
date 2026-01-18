@@ -9,6 +9,8 @@
 #include <mach/vm_statistics.h>
 #include <chrono>
 #include <IOKit/IOKitLib.h>
+#include <IOKit/ps/IOPowerSources.h>
+#include <IOKit/ps/IOPSKeys.h>
 #include <CoreFoundation/CoreFoundation.h>
 
 struct CPUMetrics {
@@ -55,6 +57,14 @@ struct SystemInfo {
     int irqCount;
 };
 
+struct BatteryMetrics {
+    bool isPresent = false;
+    bool isCharging = false;
+    bool onACPower = false;
+    double chargePercent = 0.0;
+    int timeRemainingMinutes = -1;
+};
+
 class SystemMetrics {
 public:
     SystemMetrics();
@@ -71,6 +81,7 @@ public:
     DiskMetrics getDiskMetrics() const { return diskMetrics_; }
     SystemInfo getSystemInfo() const { return systemInfo_; }
     int getIRQCount() const { return systemInfo_.irqCount; }
+    BatteryMetrics getBatteryMetrics() const { return batteryMetrics_; }
     
 private:
     void updateCPU();
@@ -80,6 +91,7 @@ private:
     void updateNetwork();
     void updateDisk();
     void updateSystemInfo();
+    void updateBattery();
     
     std::vector<CPUMetrics> cpuMetrics_;
     MemoryMetrics memoryMetrics_;
@@ -88,6 +100,7 @@ private:
     NetworkMetrics networkMetrics_;
     DiskMetrics diskMetrics_;
     SystemInfo systemInfo_;
+    BatteryMetrics batteryMetrics_;
     
     mach_port_t machPort_;
     processor_cpu_load_info_t prevCpuLoad_;

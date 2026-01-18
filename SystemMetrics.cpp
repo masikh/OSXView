@@ -14,6 +14,7 @@
 #include <net/if_types.h>
 #include <sys/socket.h>
 #include <sys/types.h>
+#include <cstring>
 
 namespace {
 
@@ -21,6 +22,21 @@ const auto kNetworkUpdateInterval = std::chrono::milliseconds(333);
 const auto kDiskUpdateInterval = std::chrono::milliseconds(1500);
 const auto kSystemInfoUpdateInterval = std::chrono::milliseconds(333);
 const auto kGPUUpdateInterval = std::chrono::milliseconds(500);
+
+mach_port_t getIOKitMasterPort() {
+#if defined(__MAC_OS_X_VERSION_MAX_ALLOWED) && __MAC_OS_X_VERSION_MAX_ALLOWED >= 120000
+    if (__builtin_available(macOS 12.0, *)) {
+        return kIOMainPortDefault;
+    }
+#endif
+    static mach_port_t masterPort = MACH_PORT_NULL;
+    if (masterPort == MACH_PORT_NULL) {
+        if (IOMasterPort(MACH_PORT_NULL, &masterPort) != KERN_SUCCESS) {
+            return MACH_PORT_NULL;
+        }
+    }
+    return masterPort;
+}
 
 template <typename T, size_t N>
 constexpr size_t arraySize(const T (&)[N]) {
@@ -91,6 +107,20 @@ bool tryGetDictionaryDouble(CFDictionaryRef dict, const CFStringRef* keys, size_
     return false;
 }
 
+bool cfStringEquals(CFTypeRef value, CFStringRef expected) {
+    if (!value || !expected || CFGetTypeID(value) != CFStringGetTypeID()) {
+        return false;
+    }
+    return CFStringCompare((CFStringRef)value, expected, 0) == kCFCompareEqualTo;
+}
+
+bool cfNumberToInt(CFTypeRef value, int& outValue) {
+    if (!value || CFGetTypeID(value) != CFNumberGetTypeID()) {
+        return false;
+    }
+    return CFNumberGetValue((CFNumberRef)value, kCFNumberIntType, &outValue);
+}
+
 } // namespace
 
 SystemMetrics::SystemMetrics() 
@@ -144,6 +174,7 @@ void SystemMetrics::update() {
     updateNetwork();
     updateDisk();
     updateSystemInfo();
+    updateBattery();
 }
 
 void SystemMetrics::updateCPU() {
@@ -262,7 +293,7 @@ void SystemMetrics::updateGPU() {
         }
 
         io_iterator_t iterator = IO_OBJECT_NULL;
-        kern_return_t kr = IOServiceGetMatchingServices(kIOMainPortDefault, matching, &iterator);
+        kern_return_t kr = IOServiceGetMatchingServices(getIOKitMasterPort(), matching, &iterator);
         if (kr != KERN_SUCCESS) {
             return false;
         }
@@ -403,7 +434,7 @@ void SystemMetrics::updateDisk() {
     }
 
     io_iterator_t iterator = IO_OBJECT_NULL;
-    kern_return_t kr = IOServiceGetMatchingServices(kIOMainPortDefault, matching, &iterator);
+    kern_return_t kr = IOServiceGetMatchingServices(getIOKitMasterPort(), matching, &iterator);
     if (kr != KERN_SUCCESS) {
         return;
     }
@@ -527,4 +558,77 @@ void SystemMetrics::updateSystemInfo() {
     // Initialize IRQ count (macOS doesn't expose IRQ count like Linux)
     // For now, we'll simulate it based on system activity
     systemInfo_.irqCount = 0;
+}
+
+void SystemMetrics::updateBattery() {
+    BatteryMetrics metrics{};
+
+    CFTypeRef powerInfo = IOPSCopyPowerSourcesInfo();
+    if (!powerInfo) {
+        batteryMetrics_ = metrics;
+        return;
+    }
+
+    CFArrayRef sources = IOPSCopyPowerSourcesList(powerInfo);
+    if (!sources) {
+        CFRelease(powerInfo);
+        batteryMetrics_ = metrics;
+        return;
+    }
+
+    CFIndex count = CFArrayGetCount(sources);
+    for (CFIndex i = 0; i < count; ++i) {
+        CFTypeRef source = CFArrayGetValueAtIndex(sources, i);
+        CFDictionaryRef description = IOPSGetPowerSourceDescription(powerInfo, source);
+        if (!description || CFGetTypeID(description) != CFDictionaryGetTypeID()) {
+            continue;
+        }
+
+        CFTypeRef typeValue = CFDictionaryGetValue(description, CFSTR("Type"));
+        if (!typeValue || !cfStringEquals(typeValue, CFSTR("InternalBattery"))) {
+            continue;
+        }
+
+        metrics.isPresent = true;
+
+        CFBooleanRef chargingRef = (CFBooleanRef)CFDictionaryGetValue(description, CFSTR("Is Charging"));
+        metrics.isCharging = chargingRef ? CFBooleanGetValue(chargingRef) : false;
+
+        CFTypeRef powerStateValue = CFDictionaryGetValue(description, CFSTR("Power Source State"));
+        if (powerStateValue && cfStringEquals(powerStateValue, CFSTR("AC Power"))) {
+            metrics.onACPower = true;
+        } else if (powerStateValue && cfStringEquals(powerStateValue, CFSTR("Battery Power"))) {
+            metrics.onACPower = false;
+        }
+
+        CFTypeRef currentCapacityValue = CFDictionaryGetValue(description, CFSTR("Current Capacity"));
+        CFTypeRef maxCapacityValue = CFDictionaryGetValue(description, CFSTR("Max Capacity"));
+        int cur = 0;
+        int max = 0;
+        if (currentCapacityValue && maxCapacityValue &&
+            cfNumberToInt(currentCapacityValue, cur) &&
+            cfNumberToInt(maxCapacityValue, max) &&
+            max > 0) {
+            metrics.chargePercent = std::clamp(static_cast<double>(cur) / static_cast<double>(max) * 100.0, 0.0, 100.0);
+        }
+
+        CFTypeRef timeRemainingValue = CFDictionaryGetValue(
+            description,
+            metrics.isCharging ? CFSTR("Time to Full Charge") : CFSTR("Time to Empty"));
+        int minutes = 0;
+        if (timeRemainingValue && cfNumberToInt(timeRemainingValue, minutes)) {
+            if (minutes == kIOPSTimeRemainingUnknown || minutes < 0) {
+                metrics.timeRemainingMinutes = -1;
+            } else {
+                metrics.timeRemainingMinutes = minutes;
+            }
+        }
+
+        break;
+    }
+
+    CFRelease(sources);
+    CFRelease(powerInfo);
+
+    batteryMetrics_ = metrics;
 }

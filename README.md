@@ -8,6 +8,7 @@ A C++ clone of the classic Xosview system monitor for macOS, built with SDL2.
 - Memory display
 - Network I/O graphs (in/out)
 - Disk I/O graphs (read/write)
+- Laptop battery charge, AC/charging status, and time remaining
 
 ## Demo
 

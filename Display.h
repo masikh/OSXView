@@ -33,7 +33,6 @@ private:
     
     // Colors
     SDL_Color backgroundColor_;
-    SDL_Color textColor_;
     SDL_Color valueColor_;
     SDL_Color labelColor_;
     SDL_Color borderColor_;
@@ -65,12 +64,17 @@ private:
     SDL_Color netOutColor_;
     SDL_Color netIdleColor_;
     
+    // Battery colors
+    SDL_Color batteryChargeColor_;
+    SDL_Color batteryReserveColor_;
+    SDL_Color batteryACColor_;
+    
     // IRQ colors
     SDL_Color irqColor_;
     SDL_Color irqIdleColor_;
     
     // Dynamic layout constants
-    static const int NUM_METERS = 5;
+    static const int NUM_METERS = 6;
     static const int METER_SPACING = 40;
     static const int LABEL_PADDING_X = 16;
     static const int LABEL_X = 10;
@@ -96,6 +100,7 @@ private:
     void drawMemoryMeter(const MemoryMetrics& metrics, int y);
     void drawDiskMeter(const DiskMetrics& metrics, int y);
     void drawNetworkMeter(const NetworkMetrics& metrics, int y);
+    void drawBatteryMeter(const BatteryMetrics& metrics, int y);
     void drawIRQMeter(int irqCount, int y);
     
     void drawHorizontalMeter(int x, int y, int width, int height,
@@ -144,6 +149,7 @@ private:
     MeterHistory memHistory_;
     MeterHistory diskHistory_;
     MeterHistory netHistory_;
+    MeterHistory batteryHistory_;
     
     void updateHistory(MeterHistory& history, const std::vector<double>& values);
     std::vector<double> computeHistoryAverage(const MeterHistory& history, size_t componentCount) const;
