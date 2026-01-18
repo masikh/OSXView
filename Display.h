@@ -47,6 +47,7 @@ private:
     SDL_Color gpuDeviceColor_;
     SDL_Color gpuRendererColor_;
     SDL_Color gpuTilerColor_;
+    SDL_Color gpuIdleColor_;
     
     // Memory colors
     SDL_Color memUsedColor_;

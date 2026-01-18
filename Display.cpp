@@ -93,6 +93,7 @@ Display::Display(int width, int height)
       gpuDeviceColor_{127, 219, 255, 255}, // Cyan for device
       gpuRendererColor_{255, 92, 146, 255}, // Pink for renderer
       gpuTilerColor_{255, 215, 0, 255},     // Gold for tiler
+      gpuIdleColor_{0, 0, 0, 255},          // Black for idle
       memUsedColor_{74, 137, 92, 255},    // Custom green for used
       memBufferColor_{255, 165, 0, 255}, // Orange for buffers
       memSlabColor_{0, 100, 255, 255},   // Dark blue for slab
@@ -321,6 +322,8 @@ void Display::drawGPUMeter(const GPUMetrics& metrics, int y) {
     double device = valid ? std::clamp(metrics.deviceUtilization, 0.0, 100.0) : 0.0;
     double renderer = valid ? std::clamp(metrics.rendererUtilization, 0.0, 100.0) : 0.0;
     double tiler = valid ? std::clamp(metrics.tilerUtilization, 0.0, 100.0) : 0.0;
+    double idle = valid ? std::max(0.0, 100.0 - std::min(100.0, device + renderer + tiler))
+                        : 100.0;
     
     drawRightAlignedDynamicText("gpu_total",
                                 labelWidth_ + 12,
@@ -328,11 +331,16 @@ void Display::drawGPUMeter(const GPUMetrics& metrics, int y) {
                                 valid ? formatValue(device, "%") : "N/A",
                                 valueColor_);
     
-    std::vector<std::string> labels = {"DEV", "REND", "TILER"};
-    std::vector<SDL_Color> colors = {gpuDeviceColor_, gpuRendererColor_, gpuTilerColor_};
+    std::vector<std::string> labels = {"DEV", "REND", "TILER", "IDLE"};
+    std::vector<SDL_Color> colors = {
+        gpuDeviceColor_,
+        gpuRendererColor_,
+        gpuTilerColor_,
+        gpuIdleColor_
+    };
     drawLegend(labelWidth_ + LABEL_TO_METER_SPACING, y - charHeight_ - 5, labels, colors);
     
-    std::vector<double> values = {device, renderer, tiler};
+    std::vector<double> values = {device, renderer, tiler, idle};
     updateHistory(gpuHistory_, values);
     std::vector<double> avgValues = computeHistoryAverage(gpuHistory_, values.size());
     drawHorizontalMeter(labelWidth_ + LABEL_TO_METER_SPACING,
@@ -504,12 +512,19 @@ void Display::drawHorizontalMeter(int x, int y, int width, int height,
         if (segmentHeight <= 0) {
             return;
         }
-        int currentX = x + 2;
+        const int innerLeft = x + 2;
+        const int innerRight = x + width - 4;
+        const int innerWidth = innerRight - innerLeft;
+        int currentX = innerLeft;
         double total = 0;
         for (double v : segments) total += v;
         
         for (size_t i = 0; i < segments.size(); i++) {
-            int segmentWidth = total > 0 ? static_cast<int>(segments[i] / 100.0 * (width - 4)) : 0;
+            int segmentWidth = total > 0 ? static_cast<int>(segments[i] / 100.0 * innerWidth) : 0;
+            int remaining = innerRight - currentX;
+            if (segmentWidth > remaining) {
+                segmentWidth = remaining;
+            }
             
             if (segmentWidth > 0) {
                 const SDL_Color& color = colors[i];
