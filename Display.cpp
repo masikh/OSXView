@@ -97,7 +97,7 @@ Display::Display(int width, int height)
       memUsedColor_{74, 137, 92, 255},    // Custom green for used
       memBufferColor_{255, 165, 0, 255}, // Orange for buffers
       memSlabColor_{0, 100, 255, 255},   // Dark blue for slab
-      memFreeColor_{255, 0, 0, 255},     // Red for free
+      memFreeColor_{0, 0, 0, 255},       // Black for free/idle
       diskReadColor_{159, 215, 244, 255}, // White for read label
       diskWriteColor_{127, 112, 247, 255},    // Red for write
       diskIdleColor_{0, 0, 0, 255},       // Black for idle
@@ -365,17 +365,27 @@ void Display::drawMemoryMeter(const MemoryMetrics& metrics, int y) {
     
     // Draw legend above the bar
     std::vector<std::string> labels = {"USED", "BUFF", "SLAB", "FREE"};
-    std::vector<SDL_Color> colors = {valueColor_, {173, 216, 230, 255}, {0, 0, 139, 255}, memFreeColor_};
+    std::vector<SDL_Color> colors = {memUsedColor_, memBufferColor_, memSlabColor_, memFreeColor_};
     drawLegend(labelWidth_ + LABEL_TO_METER_SPACING, y - charHeight_ - 5, labels, colors);
     
     // Calculate memory components
-    double used = (double)metrics.used / metrics.total * 100.0;
+    double used = metrics.total > 0 ? (double)metrics.used / metrics.total * 100.0 : 0.0;
     double buffer = 2.0; // Simulated buffer
-    double slab = (double)metrics.inactive / metrics.total * 100.0;
-    double free = (double)metrics.free / metrics.total * 100.0;
+    double slab = metrics.total > 0 ? (double)metrics.inactive / metrics.total * 100.0 : 0.0;
+    double free = metrics.total > 0 ? (double)metrics.free / metrics.total * 100.0 : 0.0;
     
     // Draw horizontal meter
     std::vector<double> values = {used, buffer, slab, free};
+    double totalPct = 0.0;
+    for (double v : values) totalPct += v;
+    if (totalPct < 100.0) {
+        values.back() += 100.0 - totalPct; // Ensure full bar coverage
+    } else if (totalPct > 100.0 && totalPct > 0.0) {
+        double scale = 100.0 / totalPct;
+        for (double& v : values) {
+            v *= scale;
+        }
+    }
     updateHistory(memHistory_, values);
     std::vector<double> avgValues = computeHistoryAverage(memHistory_, values.size());
     std::vector<SDL_Color> meterColors = {memUsedColor_, memBufferColor_, memSlabColor_, memFreeColor_};
