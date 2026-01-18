@@ -21,9 +21,14 @@ A C++ clone of the classic Xosview system monitor for macOS, built with SDL2.
 
 ## Installation
 
-1. Build the project:
+1a. Build the project from source:
 ```bash
 ./build.sh
+```
+
+1b. unzip the pre-compiled bundle:
+```bash
+unzip ./OSXView.app.zip -d ./OSXView.app 
 ```
 
 3. Run the application:

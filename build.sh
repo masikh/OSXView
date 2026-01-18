@@ -35,4 +35,6 @@ mkdir -p "${BUILD_DIR}/OSXView.app/Contents/Resources"
 echo "Building and creating OSXView.app..."
 cmake --build "${BUILD_DIR}" --config Release
 
+(cd "${BUILD_DIR}" && zip -r "${PROJECT_ROOT}/OSXView.app.zip" "OSXView.app")
 echo "Bundle ready at: ${BUILD_DIR}/OSXView.app"
+echo "Zipped bundle ready at: ${PROJECT_ROOT}/OSXView.app.zip"
