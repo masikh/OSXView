@@ -250,7 +250,7 @@ bool smcReadUInt(io_connect_t connection, const char* keyString, uint32_t& outVa
     return false;
 }
 
-bool smcReadFpe2(io_connect_t connection, const char* keyString, double& outValue) {
+bool smcReadFloat(io_connect_t connection, const char* keyString, double& outValue) {
     if (!keyString) {
         return false;
     }
@@ -260,13 +260,26 @@ bool smcReadFpe2(io_connect_t connection, const char* keyString, double& outValu
         return false;
     }
 
-    if (result.dataSize < 2) {
+    if (result.dataSize != 4) {
         return false;
     }
 
-    uint16_t raw = (static_cast<uint16_t>(result.bytes[0]) << 8)
-                 | static_cast<uint16_t>(result.bytes[1]);
-    outValue = static_cast<double>(raw) / 4.0;
+    // Convert 4-byte IEEE 754 float to double
+    // Use little-endian byte order (bytes[3] is most significant)
+    uint32_t raw = (static_cast<uint32_t>(result.bytes[3]) << 24)
+                 | (static_cast<uint32_t>(result.bytes[2]) << 16)
+                 | (static_cast<uint32_t>(result.bytes[1]) << 8)
+                 | static_cast<uint32_t>(result.bytes[0]);
+    
+    // Use union to reinterpret bits as float
+    union {
+        uint32_t i;
+        float f;
+    } u;
+    u.i = raw;
+    
+    outValue = static_cast<double>(u.f);
+    
     return true;
 }
 
@@ -828,19 +841,19 @@ void SystemMetrics::updateFans() {
         char maxKey[5] = {'F', hexDigit(i), 'M', 'x', '\0'};
 
         double rpm = 0.0;
-        bool rpmOk = smcReadFpe2(smcConnection_, actualKey, rpm);
+        bool rpmOk = smcReadFloat(smcConnection_, actualKey, rpm);
         if (rpmOk) {
             fanMetrics_[i].rpm = rpm;
             fanMetrics_[i].valid = true;
         }
 
         double minRpm = 0.0;
-        if (smcReadFpe2(smcConnection_, minKey, minRpm)) {
+        if (smcReadFloat(smcConnection_, minKey, minRpm)) {
             fanMetrics_[i].minRpm = minRpm;
         }
 
         double maxRpm = 0.0;
-        if (smcReadFpe2(smcConnection_, maxKey, maxRpm)) {
+        if (smcReadFloat(smcConnection_, maxKey, maxRpm)) {
             fanMetrics_[i].maxRpm = maxRpm;
         }
 

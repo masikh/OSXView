@@ -324,7 +324,7 @@ void Display::drawCPUMeter(const std::vector<CPUMetrics>& metrics, int y) {
 }
 
 void Display::drawFanMeter(const std::vector<FanMetrics>& metrics, int y) {
-    drawText(LABEL_PADDING_X, y + meterHeight_/2 - charHeight_/2, "FANS", labelColor_);
+    drawText(LABEL_PADDING_X, y + meterHeight_/2 - charHeight_/2, "FAN", labelColor_);
 
     if (metrics.empty()) {
         drawRightAlignedDynamicText("fan_total",
@@ -423,7 +423,7 @@ void Display::drawBatteryMeter(const BatteryMetrics& metrics, int y) {
         LABEL << "N/A";
     } else {
         if (metrics.onACPower) {
-            LABEL << "AC";
+            LABEL << "PWR";
         } else if (metrics.isCharging) {
             LABEL << "CHG";
         } else {
@@ -549,9 +549,9 @@ void Display::drawMemoryMeter(const MemoryMetrics& metrics, int y) {
 
 void Display::drawDiskMeter(const DiskMetrics& metrics, int y) {
     // Draw label and value
-    drawText(LABEL_PADDING_X, y + meterHeight_/2 - charHeight_/2, "DISK", labelColor_);
+    drawText(LABEL_PADDING_X, y + meterHeight_/2 - charHeight_/2, "DSK", labelColor_);
     
-    std::string valStr = formatBytes(metrics.readBytes + metrics.writeBytes) + "/s";
+    std::string valStr = formatBytes(metrics.readBytes + metrics.writeBytes);
     drawRightAlignedDynamicText("disk_total",
                                 labelWidth_ + 12,
                                 y + meterHeight_/2 - charHeight_/2,
