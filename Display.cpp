@@ -285,6 +285,9 @@ void Display::draw(const SystemMetrics& metrics) {
     
     drawNetworkMeter(metrics.getNetworkMetrics(), y);
     y += meterHeight_ + METER_SPACING;
+
+    drawFanMeter(metrics.getFanMetrics(), y);
+    y += meterHeight_ + METER_SPACING;
     
     drawBatteryMeter(metrics.getBatteryMetrics(), y);
 }
@@ -318,6 +321,127 @@ void Display::drawCPUMeter(const std::vector<CPUMetrics>& metrics, int y) {
     std::vector<double> avgValues = computeHistoryAverage(cpuHistory_, values.size());
     std::vector<SDL_Color> meterColors = {cpuUserColor_, cpuSystemColor_, cpuIdleColor_};
     drawHorizontalMeter(labelWidth_ + LABEL_TO_METER_SPACING, y, meterWidth_, meterHeight_, values, meterColors, &avgValues);
+}
+
+void Display::drawFanMeter(const std::vector<FanMetrics>& metrics, int y) {
+    drawText(LABEL_PADDING_X, y + meterHeight_/2 - charHeight_/2, "FANS", labelColor_);
+
+    if (metrics.empty()) {
+        drawRightAlignedDynamicText("fan_total",
+                                    labelWidth_ + 12,
+                                    y + meterHeight_/2 - charHeight_/2,
+                                    "N/A",
+                                    valueColor_);
+        drawMeterBorder(labelWidth_ + LABEL_TO_METER_SPACING, y, meterWidth_, meterHeight_);
+        return;
+    }
+
+    const int meterX = labelWidth_ + LABEL_TO_METER_SPACING;
+    const int innerLeft = meterX + 2;
+    const int innerRight = meterX + meterWidth_ - 4;
+    const int innerWidth = innerRight - innerLeft;
+    const int innerTop = y + 2;
+    const int innerHeight = meterHeight_ - 4;
+    const int topHeight = innerHeight / 2;
+    const int bottomHeight = innerHeight - topHeight;
+
+    const size_t fanCount = metrics.size();
+    std::vector<double> currentPct(fanCount, 0.0);
+    double rpmSum = 0.0;
+    size_t rpmCount = 0;
+
+    for (size_t i = 0; i < fanCount; ++i) {
+        if (!metrics[i].valid) {
+            continue;
+        }
+
+        double maxRpm = metrics[i].maxRpm;
+        if (maxRpm <= 0.0) {
+            maxRpm = 6000.0;
+        }
+        const double ratio = std::clamp(metrics[i].rpm / maxRpm, 0.0, 1.0);
+        currentPct[i] = ratio * 100.0;
+        rpmSum += metrics[i].rpm;
+        rpmCount += 1;
+    }
+
+    updateHistory(fanHistory_, currentPct);
+    std::vector<double> avgPct = computeHistoryAverage(fanHistory_, currentPct.size());
+
+    const double rpmAvg = rpmCount > 0 ? (rpmSum / static_cast<double>(rpmCount)) : 0.0;
+    drawRightAlignedDynamicText("fan_total",
+                                labelWidth_ + 12,
+                                y + meterHeight_/2 - charHeight_/2,
+                                rpmCount > 0 ? formatValue(rpmAvg, "") : "N/A",
+                                valueColor_);
+
+    std::vector<std::string> labels;
+    std::vector<SDL_Color> colors;
+    labels.reserve(fanCount);
+    colors.reserve(fanCount);
+
+    const std::vector<SDL_Color> palette = {
+        cpuUserColor_,
+        cpuSystemColor_,
+        memSlabColor_,
+        netInColor_,
+        netOutColor_,
+        gpuDeviceColor_,
+        gpuRendererColor_,
+        gpuTilerColor_,
+        batteryACColor_
+    };
+
+    for (size_t i = 0; i < fanCount; ++i) {
+        labels.push_back("F" + std::to_string(i));
+        colors.push_back(palette[i % palette.size()]);
+    }
+
+    drawLegend(meterX, y - charHeight_ - 5, labels, colors);
+    drawMeterBorder(meterX, y, meterWidth_, meterHeight_);
+
+    if (innerWidth <= 0 || innerHeight <= 0) {
+        return;
+    }
+
+    SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 255);
+    SDL_Rect backgroundRect{innerLeft, innerTop, innerWidth, innerHeight};
+    SDL_RenderFillRect(renderer_, &backgroundRect);
+
+    const int gap = 1;
+    const int segmentStride = fanCount > 0 ? innerWidth / static_cast<int>(fanCount) : innerWidth;
+    int segmentX = innerLeft;
+
+    for (size_t i = 0; i < fanCount; ++i) {
+        int segWidth = (i + 1 == fanCount) ? (innerRight - segmentX) : segmentStride;
+        segWidth = std::max(0, segWidth);
+
+        int drawWidth = std::max(0, segWidth - gap);
+        SDL_Color color = colors[i];
+
+        if (drawWidth > 0 && topHeight > 0) {
+            int fillWidth = static_cast<int>(std::clamp(currentPct[i], 0.0, 100.0) / 100.0 * drawWidth);
+            if (fillWidth > 0) {
+                SDL_SetRenderDrawColor(renderer_, color.r, color.g, color.b, color.a);
+                SDL_Rect fillRect{segmentX, innerTop, fillWidth, topHeight};
+                SDL_RenderFillRect(renderer_, &fillRect);
+            }
+        }
+
+        if (drawWidth > 0 && bottomHeight > 0 && i < avgPct.size()) {
+            int fillWidth = static_cast<int>(std::clamp(avgPct[i], 0.0, 100.0) / 100.0 * drawWidth);
+            if (fillWidth > 0) {
+                SDL_SetRenderDrawColor(renderer_, color.r, color.g, color.b, color.a);
+                SDL_Rect fillRect{segmentX, innerTop + topHeight, fillWidth, bottomHeight};
+                SDL_RenderFillRect(renderer_, &fillRect);
+            }
+        }
+
+        segmentX += segWidth;
+        if (segmentX >= innerRight) {
+            break;
+        }
+    }
 }
 
 void Display::drawBatteryMeter(const BatteryMetrics& metrics, int y) {

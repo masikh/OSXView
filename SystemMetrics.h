@@ -65,6 +65,13 @@ struct BatteryMetrics {
     int timeRemainingMinutes = -1;
 };
 
+struct FanMetrics {
+    double rpm = 0.0;
+    double minRpm = 0.0;
+    double maxRpm = 0.0;
+    bool valid = false;
+};
+
 class SystemMetrics {
 public:
     SystemMetrics();
@@ -82,6 +89,7 @@ public:
     SystemInfo getSystemInfo() const { return systemInfo_; }
     int getIRQCount() const { return systemInfo_.irqCount; }
     BatteryMetrics getBatteryMetrics() const { return batteryMetrics_; }
+    std::vector<FanMetrics> getFanMetrics() const { return fanMetrics_; }
     
 private:
     void updateCPU();
@@ -92,6 +100,7 @@ private:
     void updateDisk();
     void updateSystemInfo();
     void updateBattery();
+    void updateFans();
     
     std::vector<CPUMetrics> cpuMetrics_;
     MemoryMetrics memoryMetrics_;
@@ -101,6 +110,7 @@ private:
     DiskMetrics diskMetrics_;
     SystemInfo systemInfo_;
     BatteryMetrics batteryMetrics_;
+    std::vector<FanMetrics> fanMetrics_;
     
     mach_port_t machPort_;
     processor_cpu_load_info_t prevCpuLoad_;
@@ -121,6 +131,7 @@ private:
     
     io_iterator_t networkIter_;
     io_iterator_t diskIter_;
+    io_connect_t smcConnection_;
 };
 
 #endif //OSXVIEW_SYSTEMMETRICS_H

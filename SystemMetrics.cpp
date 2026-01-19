@@ -15,6 +15,8 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <cstring>
+#include <cstdio>
+#include <algorithm>
 
 namespace {
 
@@ -121,6 +123,153 @@ bool cfNumberToInt(CFTypeRef value, int& outValue) {
     return CFNumberGetValue((CFNumberRef)value, kCFNumberIntType, &outValue);
 }
 
+struct SMCKeyData_vers_t {
+    char major;
+    char minor;
+    char build;
+    char reserved;
+    uint16_t release;
+};
+
+struct SMCKeyData_pLimitData_t {
+    uint16_t version;
+    uint16_t length;
+    uint32_t cpuPLimit;
+    uint32_t gpuPLimit;
+    uint32_t memPLimit;
+};
+
+struct SMCKeyData_keyInfo_t {
+    uint32_t dataSize;
+    uint32_t dataType;
+    uint8_t dataAttributes;
+};
+
+struct SMCKeyData_t {
+    uint32_t key;
+    SMCKeyData_vers_t vers;
+    SMCKeyData_pLimitData_t pLimitData;
+    SMCKeyData_keyInfo_t keyInfo;
+    uint8_t result;
+    uint8_t status;
+    uint8_t data8;
+    uint32_t data32;
+    uint8_t bytes[32];
+};
+
+static_assert(sizeof(SMCKeyData_t) == 80, "SMCKeyData_t size mismatch");
+
+struct SMCReadResult {
+    uint32_t dataSize = 0;
+    uint32_t dataType = 0;
+    uint8_t bytes[32]{};
+};
+
+constexpr uint32_t kSMCUserClientMethod = 2;
+constexpr uint8_t kSMCCmdReadKey = 5;
+constexpr uint8_t kSMCCmdReadKeyInfo = 9;
+
+uint32_t smcKeyFromString(const char* key) {
+    if (!key) {
+        return 0;
+    }
+    return (static_cast<uint32_t>(key[0]) << 24)
+         | (static_cast<uint32_t>(key[1]) << 16)
+         | (static_cast<uint32_t>(key[2]) << 8)
+         | static_cast<uint32_t>(key[3]);
+}
+
+bool smcCall(io_connect_t connection, SMCKeyData_t* input, SMCKeyData_t* output) {
+    if (!input || !output || connection == IO_OBJECT_NULL) {
+        return false;
+    }
+    size_t outputSize = sizeof(SMCKeyData_t);
+    kern_return_t kr = IOConnectCallStructMethod(connection,
+                                                 kSMCUserClientMethod,
+                                                 input,
+                                                 sizeof(SMCKeyData_t),
+                                                 output,
+                                                 &outputSize);
+    return kr == KERN_SUCCESS;
+}
+
+bool smcReadKey(io_connect_t connection, uint32_t key, SMCReadResult& outResult) {
+    SMCKeyData_t input{};
+    SMCKeyData_t output{};
+
+    input.key = key;
+    input.data8 = kSMCCmdReadKeyInfo;
+
+    if (!smcCall(connection, &input, &output)) {
+        return false;
+    }
+
+    outResult.dataSize = output.keyInfo.dataSize;
+    outResult.dataType = output.keyInfo.dataType;
+
+    input.keyInfo.dataSize = outResult.dataSize;
+    input.data8 = kSMCCmdReadKey;
+
+    if (!smcCall(connection, &input, &output)) {
+        return false;
+    }
+
+    std::memcpy(outResult.bytes, output.bytes, sizeof(outResult.bytes));
+    return true;
+}
+
+bool smcReadUInt(io_connect_t connection, const char* keyString, uint32_t& outValue) {
+    if (!keyString) {
+        return false;
+    }
+
+    SMCReadResult result;
+    if (!smcReadKey(connection, smcKeyFromString(keyString), result)) {
+        return false;
+    }
+
+    if (result.dataSize == 1) {
+        outValue = result.bytes[0];
+        return true;
+    }
+
+    if (result.dataSize == 2) {
+        outValue = (static_cast<uint32_t>(result.bytes[0]) << 8)
+                 | static_cast<uint32_t>(result.bytes[1]);
+        return true;
+    }
+
+    if (result.dataSize == 4) {
+        outValue = (static_cast<uint32_t>(result.bytes[0]) << 24)
+                 | (static_cast<uint32_t>(result.bytes[1]) << 16)
+                 | (static_cast<uint32_t>(result.bytes[2]) << 8)
+                 | static_cast<uint32_t>(result.bytes[3]);
+        return true;
+    }
+
+    return false;
+}
+
+bool smcReadFpe2(io_connect_t connection, const char* keyString, double& outValue) {
+    if (!keyString) {
+        return false;
+    }
+
+    SMCReadResult result;
+    if (!smcReadKey(connection, smcKeyFromString(keyString), result)) {
+        return false;
+    }
+
+    if (result.dataSize < 2) {
+        return false;
+    }
+
+    uint16_t raw = (static_cast<uint16_t>(result.bytes[0]) << 8)
+                 | static_cast<uint16_t>(result.bytes[1]);
+    outValue = static_cast<double>(raw) / 4.0;
+    return true;
+}
+
 } // namespace
 
 SystemMetrics::SystemMetrics() 
@@ -133,7 +282,7 @@ SystemMetrics::SystemMetrics()
       lastNetworkSample_(),
       lastSystemInfoSample_(),
       lastGpuSample_(),
-      networkIter_(0), diskIter_(0) {
+      networkIter_(0), diskIter_(0), smcConnection_(IO_OBJECT_NULL) {
 }
 
 SystemMetrics::~SystemMetrics() {
@@ -146,6 +295,11 @@ SystemMetrics::~SystemMetrics() {
     }
     if (diskIter_) {
         IOObjectRelease(diskIter_);
+    }
+
+    if (smcConnection_ != IO_OBJECT_NULL) {
+        IOServiceClose(smcConnection_);
+        smcConnection_ = IO_OBJECT_NULL;
     }
 }
 
@@ -162,7 +316,19 @@ bool SystemMetrics::initialize() {
     
     // Initialize system info
     updateSystemInfo();
-    
+
+    io_service_t smcService = IOServiceGetMatchingService(getIOKitMasterPort(), IOServiceMatching("AppleSMC"));
+    if (smcService == IO_OBJECT_NULL) {
+        smcService = IOServiceGetMatchingService(getIOKitMasterPort(), IOServiceMatching("AppleSMCKeysEndpoint"));
+    }
+    if (smcService != IO_OBJECT_NULL) {
+        kern_return_t openResult = IOServiceOpen(smcService, mach_task_self(), 0, &smcConnection_);
+        IOObjectRelease(smcService);
+        if (openResult != KERN_SUCCESS) {
+            smcConnection_ = IO_OBJECT_NULL;
+        }
+    }
+
     return true;
 }
 
@@ -175,6 +341,7 @@ void SystemMetrics::update() {
     updateDisk();
     updateSystemInfo();
     updateBattery();
+    updateFans();
 }
 
 void SystemMetrics::updateCPU() {
@@ -631,4 +798,55 @@ void SystemMetrics::updateBattery() {
     CFRelease(powerInfo);
 
     batteryMetrics_ = metrics;
+}
+
+void SystemMetrics::updateFans() {
+    if (smcConnection_ == IO_OBJECT_NULL) {
+        fanMetrics_.clear();
+        return;
+    }
+
+    uint32_t fanCount = 0;
+    if (!smcReadUInt(smcConnection_, "FNum", fanCount) || fanCount == 0) {
+        fanMetrics_.clear();
+        return;
+    }
+
+    fanCount = std::min<uint32_t>(fanCount, 16);
+    fanMetrics_.assign(fanCount, FanMetrics{});
+
+    auto hexDigit = [](uint32_t value) -> char {
+        if (value < 10) {
+            return static_cast<char>('0' + value);
+        }
+        return static_cast<char>('A' + (value - 10));
+    };
+
+    for (uint32_t i = 0; i < fanCount; ++i) {
+        char actualKey[5] = {'F', hexDigit(i), 'A', 'c', '\0'};
+        char minKey[5] = {'F', hexDigit(i), 'M', 'n', '\0'};
+        char maxKey[5] = {'F', hexDigit(i), 'M', 'x', '\0'};
+
+        double rpm = 0.0;
+        bool rpmOk = smcReadFpe2(smcConnection_, actualKey, rpm);
+        if (rpmOk) {
+            fanMetrics_[i].rpm = rpm;
+            fanMetrics_[i].valid = true;
+        }
+
+        double minRpm = 0.0;
+        if (smcReadFpe2(smcConnection_, minKey, minRpm)) {
+            fanMetrics_[i].minRpm = minRpm;
+        }
+
+        double maxRpm = 0.0;
+        if (smcReadFpe2(smcConnection_, maxKey, maxRpm)) {
+            fanMetrics_[i].maxRpm = maxRpm;
+        }
+
+        if (!rpmOk) {
+            fanMetrics_[i].rpm = 0.0;
+            fanMetrics_[i].valid = false;
+        }
+    }
 }

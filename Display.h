@@ -74,7 +74,7 @@ private:
     SDL_Color irqIdleColor_;
     
     // Dynamic layout constants
-    static const int NUM_METERS = 6;
+    static const int NUM_METERS = 7;
     static const int METER_SPACING = 40;
     static const int LABEL_PADDING_X = 16;
     static const int LABEL_X = 10;
@@ -100,6 +100,7 @@ private:
     void drawMemoryMeter(const MemoryMetrics& metrics, int y);
     void drawDiskMeter(const DiskMetrics& metrics, int y);
     void drawNetworkMeter(const NetworkMetrics& metrics, int y);
+    void drawFanMeter(const std::vector<FanMetrics>& metrics, int y);
     void drawBatteryMeter(const BatteryMetrics& metrics, int y);
     void drawIRQMeter(int irqCount, int y);
     
@@ -149,6 +150,7 @@ private:
     MeterHistory memHistory_;
     MeterHistory diskHistory_;
     MeterHistory netHistory_;
+    MeterHistory fanHistory_;
     MeterHistory batteryHistory_;
     
     void updateHistory(MeterHistory& history, const std::vector<double>& values);
